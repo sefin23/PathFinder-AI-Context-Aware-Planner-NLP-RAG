@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Date
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from backend.database import Base
 from datetime import datetime, timezone
@@ -12,12 +12,6 @@ class TaskStatus(str, enum.Enum):
     skipped = "skipped"
 
 
-class TaskPriority(str, enum.Enum):
-    low = "low"
-    medium = "medium"
-    high = "high"
-
-
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -25,8 +19,19 @@ class Task(Base):
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending, nullable=False)
-    priority = Column(SQLEnum(TaskPriority), default=TaskPriority.medium, nullable=False)
-    due_date = Column(Date, nullable=True)
+
+    # Layer 2: integer priority scale 1 (lowest) – 5 (highest), default 3 (normal)
+    priority = Column(Integer, default=3, nullable=False)
+
+    # Layer 2: full datetime deadline (nullable)
+    due_date = Column(DateTime, nullable=True)
+
+    # Layer 2: user opted out of reminders for this specific task
+    reminder_opt_out = Column(Boolean, default=False, nullable=False)
+
+    # Layer 2: timestamp recorded when status transitions to 'completed'
+    completed_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -35,14 +40,11 @@ class Task(Base):
     life_event_id = Column(Integer, ForeignKey("life_events.id"), nullable=False)
 
     # Self-referencing foreign key — nullable means this is a top-level task
-    # If set, this task is a subtask of parent_id
     parent_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
 
     # Relationships
     life_event = relationship("LifeEvent", back_populates="tasks")
-
-    # parent → access the parent Task object from a subtask
     parent = relationship("Task", remote_side=[id], back_populates="children")
-
-    # children → access all direct subtasks of this task
     children = relationship("Task", back_populates="parent", cascade="all, delete-orphan")
+    reminder_logs = relationship("ReminderLog", back_populates="task", cascade="all, delete-orphan")
+

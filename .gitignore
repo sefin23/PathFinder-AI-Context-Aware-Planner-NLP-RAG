@@ -154,6 +154,7 @@ cython_debug/
 test.db
 .qodo/
 .agent/
+.editorconfig
 
 # Sandbox folder
 test_backend/

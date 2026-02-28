@@ -54,9 +54,11 @@
                 <div class="form-group" style="flex:1; min-width:140px;">
                     <label for="task-priority">Priority</label>
                     <select id="task-priority">
-                        <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
-                        <option value="low">Low</option>
+                        <option value="1">1 - Lowest</option>
+                        <option value="2">2 - Low</option>
+                        <option value="3" selected>3 - Medium</option>
+                        <option value="4">4 - High</option>
+                        <option value="5">5 - Critical</option>
                     </select>
                 </div>
 
@@ -81,12 +83,23 @@
 
         <!-- Task List Header -->
         <div class="flex-between mt-8" style="margin-bottom:14px;">
-            <h2 style="font-size:1rem; font-weight:600;">Tasks</h2>
-            <span class="text-muted" id="task-count"></span>
+            <div style="display:flex; align-items:center; gap: 12px;">
+                <h2 style="font-size:1rem; font-weight:600;">Tasks</h2>
+                <span class="text-muted" id="task-count"></span>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap: 8px;">
+                <label for="task-sort" style="font-size:0.85rem; color:var(--text-muted);">Sort by:</label>
+                <select id="task-sort" class="inline-select" style="padding:4px 8px; font-size:0.85rem;" onchange="loadTasks()">
+                    <option value="urgency" selected>Urgency (Smart)</option>
+                    <option value="due_date">Due Date</option>
+                    <option value="priority">Priority</option>
+                </select>
+            </div>
         </div>
 
         <!-- Task list rendered here -->
-        <ul class="task-list" id="tasks-list"></ul>
+        <div id="tasks-container"></div>
 
         <div class="empty-state hidden" id="tasks-empty">
             <div class="empty-icon">✅</div>

@@ -137,6 +137,16 @@ a:hover {
   background: rgba(246, 166, 35, 0.15);
   color: var(--warning);
 }
+.badge--overdue {
+  background: rgba(224, 82, 82, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(224, 82, 82, 0.3);
+}
+.badge--today {
+  background: rgba(246, 166, 35, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(246, 166, 35, 0.3);
+}
 
 /* --- Form Panel --- */
 .form-panel {
@@ -230,9 +240,24 @@ a:hover {
   font-size: 0.8rem;
 }
 
-/* --- Task List --- */
+/* --- Task List & Groups --- */
+.group-header {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 24px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.group-header:first-child {
+  margin-top: 0;
+}
+
 .task-list {
   list-style: none;
+  margin-bottom: 16px;
 }
 
 .task-item {
@@ -253,6 +278,10 @@ a:hover {
   margin-left: 36px;
   border-left: 3px solid var(--accent);
   background: var(--bg-surface);
+}
+.task-item.task-item--overdue {
+  border-color: rgba(224, 82, 82, 0.4);
+  background: rgba(224, 82, 82, 0.04);
 }
 .task-item .task-check {
   width: 18px;
@@ -275,11 +304,13 @@ a:hover {
   color: var(--text-muted);
 }
 .task-item .task-meta {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
   flex-wrap: wrap;
+  margin-top: 6px;
 }
 .task-item .task-actions {
   display: flex;
@@ -303,6 +334,31 @@ a:hover {
 }
 .priority-dot--low {
   background: var(--success);
+}
+
+/* --- Inline Edit Controls --- */
+.inline-input, .inline-select {
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: all 0.15s;
+}
+.inline-input:hover, .inline-select:hover,
+.inline-input:focus, .inline-select:focus {
+  border-color: var(--border);
+  background: var(--bg-surface);
+  outline: none;
+}
+.inline-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 /* --- Empty state --- */
