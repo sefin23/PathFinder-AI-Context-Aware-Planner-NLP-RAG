@@ -15,6 +15,10 @@ Required env vars for email:
     SMTP_PASSWORD    app password or API key
     EMAIL_FROM       "Pathfinder AI <no-reply@example.com>"
 
+Required env vars for NLP (Layer 3):
+    GEMINI_API_KEY      Google AI Studio API key — used for embeddings (aistudio.google.com)
+    OPENROUTER_API_KEY  OpenRouter API key — used for LLM explanation (openrouter.ai/keys)
+
 Optional:
     SMTP_TLS         "true" (default) — use STARTTLS
     EMAIL_MAX_RETRIES   "3" (default)
@@ -23,6 +27,12 @@ Optional:
 """
 import os
 from dataclasses import dataclass, field
+
+from dotenv import load_dotenv
+
+# Load .env file before the Settings dataclass reads os.environ.
+# override=True ensures .env always wins over stale OS environment variables.
+load_dotenv(override=True)
 
 
 def _env(key: str, default: str = "") -> str:
@@ -58,6 +68,10 @@ class Settings:
     # Retry settings
     email_max_retries: int = field(default_factory=lambda: _env_int("EMAIL_MAX_RETRIES", 3))
     email_retry_delay: int = field(default_factory=lambda: _env_int("EMAIL_RETRY_DELAY", 5))
+
+    # NLP / AI
+    gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY"))
+    openrouter_api_key: str = field(default_factory=lambda: _env("OPENROUTER_API_KEY"))
 
     # Runtime environment
     app_env: str = field(default_factory=lambda: _env("APP_ENV", "development"))

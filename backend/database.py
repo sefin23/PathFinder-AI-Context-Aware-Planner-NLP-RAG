@@ -16,6 +16,7 @@ def init_db():
     from backend.models.life_event_model import LifeEvent  # noqa: F401
     from backend.models.task_model import Task       # noqa: F401
     from backend.models.reminder_log_model import ReminderLog  # noqa: F401
+    from backend.models.knowledge_base_model import KnowledgeBaseEntry  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _seed_default_user()
 
