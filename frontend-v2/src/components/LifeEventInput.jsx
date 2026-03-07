@@ -50,6 +50,7 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
             resize: 'none',
             outline: 'none',
             transition: 'all 0.3s',
+            boxSizing: 'border-box'
           }}
           onFocus={(e) => { e.target.style.borderColor = 'var(--sage)' }}
           onBlur={(e)  => { e.target.style.borderColor = 'rgba(255,255,255,0.12)' }}
@@ -104,17 +105,24 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
         </span>
 
         <button
-          className="mbtn"
+          className="btn-cust"
           onClick={handleSubmit}
           disabled={!canSubmit}
           style={{
             opacity: canSubmit ? 1 : 0.5,
             cursor: canSubmit ? 'pointer' : 'not-allowed',
             background: canSubmit ? 'var(--amber)' : 'rgba(255,255,255,0.1)',
-            color: canSubmit ? 'white' : 'var(--muted)'
+            color: canSubmit ? 'var(--forest-deep)' : 'var(--muted)',
+            fontWeight: 700,
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: 'var(--r-md)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
           }}
         >
-          {busy ? 'Scanning paths...' : 'Understand my situation →'}
+          {busy ? <><Loader2 size={16} style={{ animation: 'spin 1.5s linear infinite' }} /> SCANNING PATHS...</> : 'INITIATE PATHFINDING'}
         </button>
       </div>
     </div>

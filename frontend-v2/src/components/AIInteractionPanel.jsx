@@ -1,12 +1,12 @@
 /**
  * AIInteractionPanel — centre panel: input at bottom, chat timeline above.
- * Does NOT fetch data — it receives messages and processingSteps from Dashboard.
+ * Dark Forest styling.
  */
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import LifeEventInput from './LifeEventInput'
 import ChatBubble from './ChatBubble'
-import { MessageSquare } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 export default function AIInteractionPanel({
   messages = [],
@@ -30,7 +30,7 @@ export default function AIInteractionPanel({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        background: '#0F172A',
+        background: 'var(--forest-deep)',
       }}
     >
       {/* Chat Timeline */}
@@ -38,10 +38,10 @@ export default function AIInteractionPanel({
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '20px 24px 8px',
+          padding: '40px 48px 24px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
+          gap: 24,
         }}
       >
         {/* Empty state */}
@@ -56,32 +56,32 @@ export default function AIInteractionPanel({
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 12,
-              color: '#475569',
+              gap: 20,
+              color: 'var(--muted)',
               textAlign: 'center',
-              paddingBottom: 40,
+              paddingBottom: 60,
             }}
           >
             <div
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 14,
-                background: '#1E293B',
+                width: 64,
+                height: 64,
+                borderRadius: 'var(--r-md)',
+                background: 'rgba(255,255,255,0.02)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '1px solid #334155',
+                border: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              <MessageSquare size={22} color="#6366F1" />
+              <Sparkles size={28} color="var(--sage)" />
             </div>
             <div>
-              <p style={{ fontSize: 15, fontWeight: 600, color: '#94A3B8', marginBottom: 4 }}>
-                Start by describing your situation
+              <p className="font-playfair" style={{ fontSize: 24, fontWeight: 700, color: 'white', marginBottom: 8 }}>
+                Initiate Pathfinding Sequence
               </p>
-              <p style={{ fontSize: 13, color: '#475569', maxWidth: 320, lineHeight: 1.5 }}>
-                Tell Pathfinder about a major life change — a job, move, marriage, or any big decision — and it will plan everything for you.
+              <p style={{ fontSize: 14, color: 'var(--fog)', maxWidth: 420, lineHeight: 1.6, margin: '0 auto' }}>
+                Describe a complex scenario or impending transition. The intelligence core will synthesize optimal navigation pathways and extract critical milestones.
               </p>
             </div>
           </motion.div>
@@ -96,19 +96,19 @@ export default function AIInteractionPanel({
         {processingSteps.length > 0 && (
           <div
             style={{
-              marginLeft: 40,
-              padding: '8px 14px',
-              background: '#1E293B',
-              borderRadius: 10,
-              border: '1px solid #334155',
-              fontSize: 12.5,
+              marginLeft: 56,
+              padding: '16px 20px',
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: 'var(--r-md)',
+              border: '1px solid rgba(255,255,255,0.05)',
+              fontSize: 13,
             }}
           >
             {processingSteps.map((step, i) => (
               <ChatBubble
                 key={step.id ?? i}
                 type="step"
-                text={step.done ? `✓ ${step.text.replace('...', '')} complete` : step.text}
+                text={step.done ? `[COMPLETED] ${step.text.replace('...', '')}` : `[ACTIVE] ${step.text}`}
                 done={step.done}
               />
             ))}
@@ -119,10 +119,12 @@ export default function AIInteractionPanel({
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: '#1E293B' }} />
+      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)' }} />
 
       {/* Input */}
-      <LifeEventInput stage={stage} onSubmit={onSubmit} />
+      <div style={{ padding: '24px 48px 48px' }}>
+          <LifeEventInput stage={stage} onSubmit={onSubmit} />
+      </div>
     </div>
   )
 }
