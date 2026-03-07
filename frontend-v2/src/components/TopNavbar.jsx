@@ -1,19 +1,20 @@
 /**
  * TopNavbar — top bar showing current page context and status.
  * Adapts label to the active pipeline stage.
+ * Dark Forest styling.
  */
 import { motion, AnimatePresence } from 'framer-motion'
 import { Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 const STAGE_LABELS = {
-  idle:         { text: 'Ready · Describe your situation to begin', icon: null, color: 'var(--text-secondary)' },
-  analyzing:    { text: 'Analyzing your life event...', icon: Sparkles, color: 'var(--accent)' },
-  analyzed:     { text: 'Event classified · Retrieving requirements', icon: Sparkles, color: 'var(--accent)' },
-  'loading-docs': { text: 'Searching knowledge base...', icon: Sparkles, color: 'var(--accent)' },
-  'docs-loaded':  { text: 'Requirements found · Generating workflow', icon: Sparkles, color: 'var(--accent)' },
-  generating:   { text: 'Generating AI workflow...', icon: Sparkles, color: 'var(--accent)' },
-  complete:     { text: 'Workflow ready · Review and approve', icon: CheckCircle2, color: 'var(--success)' },
-  error:        { text: 'Something went wrong · Retry below', icon: AlertCircle, color: 'var(--error)' },
+  idle:         { text: 'Sequence Awaiting Input', icon: null, color: 'var(--muted)' },
+  analyzing:    { text: 'Synthesizing Event Data...', icon: Sparkles, color: 'var(--lavender)' },
+  analyzed:     { text: 'Event Classified · Accessing Databanks', icon: Sparkles, color: 'var(--lavender)' },
+  'loading-docs': { text: 'Scanning Knowledge Core...', icon: Sparkles, color: 'var(--lavender)' },
+  'docs-loaded':  { text: 'Requirements Extracted · Computing Vectors', icon: Sparkles, color: 'var(--lavender)' },
+  generating:   { text: 'Assembling Optimal Trajectory...', icon: Sparkles, color: 'var(--lavender)' },
+  complete:     { text: 'Trajectory Synthesized · Pending Authorization', icon: CheckCircle2, color: 'var(--sage)' },
+  error:        { text: 'Critical Error · Sequence Aborted', icon: AlertCircle, color: 'var(--coral)' },
 }
 
 export default function TopNavbar({ stage = 'idle', activePage = 'dashboard' }) {
@@ -23,21 +24,23 @@ export default function TopNavbar({ stage = 'idle', activePage = 'dashboard' }) 
   return (
     <header
       style={{
-        height: 52,
-        background: 'var(--surface-card)',
-        borderBottom: '1px solid var(--border-subtle)',
+        height: 56,
+        background: 'rgba(13,26,21,0.8)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
+        padding: '0 32px',
         flexShrink: 0,
+        zIndex: 50,
       }}
     >
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
-        <span style={{ color: 'var(--text-secondary)' }}>Pathfinder</span>
-        <span style={{ color: 'var(--border-subtle)' }}>/</span>
-        <span style={{ color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>
+      <div className="font-mono" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        <span style={{ color: 'var(--muted)' }}>Pathfinder</span>
+        <span style={{ color: 'var(--forest-card)', fontSize: 14 }}>/</span>
+        <span style={{ color: 'var(--fog)', fontWeight: 700 }}>
           {activePage.replace('-', ' ')}
         </span>
       </div>
@@ -49,17 +52,24 @@ export default function TopNavbar({ stage = 'idle', activePage = 'dashboard' }) 
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.3 }}
+          className="font-mono"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            fontSize: 12,
+            gap: 8,
+            fontSize: 10,
             color: stageInfo.color,
-            fontWeight: 500,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.15em',
+            background: 'rgba(255,255,255,0.03)',
+            padding: '6px 14px',
+            borderRadius: 'var(--r-pill)',
+            border: '1px solid rgba(255,255,255,0.05)'
           }}
         >
-          {Icon && <Icon size={13} />}
+          {Icon && <Icon size={12} style={{ animation: stage.includes('ing') || stage === 'loading-docs' ? 'pulse 1.5s ease infinite' : 'none' }} />}
           <span>{stageInfo.text}</span>
         </motion.div>
       </AnimatePresence>

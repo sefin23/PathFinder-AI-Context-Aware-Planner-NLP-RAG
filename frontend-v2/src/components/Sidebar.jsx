@@ -2,9 +2,11 @@
  * Sidebar — left navigation panel.
  * Shows logo, nav links, and recent workflow stubs.
  * Active link is determined by the `activePage` prop.
+ * Dark Forest styling.
  */
 import { motion } from 'framer-motion'
 import {
+  Sparkles,
   LayoutDashboard,
   Calendar,
   BookOpen,
@@ -31,40 +33,45 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
     <aside
       className="sb-wrap"
       style={{
-        width: 240,
-        minWidth: 240,
-        background: 'rgba(0,0,0,0.32)',
-        borderRight: '1px solid var(--border)',
+        width: 250,
+        minWidth: 250,
+        background: 'rgba(13,26,21,0.5)',
+        backdropFilter: 'blur(20px)',
+        borderRight: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
         overflow: 'hidden',
+        zIndex: 10,
       }}
     >
       {/* Logo */}
-      <div style={{ padding: 'var(--space-3) var(--space-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: 'var(--amber)',
+            width: 32,
+            height: 32,
+            borderRadius: 'var(--r-sm)',
+            background: 'rgba(212,124,63,0.15)',
+            border: '1px solid rgba(212,124,63,0.3)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            boxShadow: '0 0 15px rgba(212,124,63,0.2)'
           }}
         >
-          <Compass size={16} color="#fff" strokeWidth={2.5} />
+          <Sparkles size={16} color="var(--amber)" />
         </div>
         <div style={{ flex: 1 }}>
-          <div className="font-playfair" style={{ fontWeight: 700, fontSize: 16, color: 'white', lineHeight: 1 }}>
-            PathFinder
+          <div className="font-playfair" style={{ fontWeight: 800, fontSize: 18, color: 'white', letterSpacing: '0.02em', lineHeight: 1 }}>
+            PathFinder <span style={{ color: 'var(--sage)', fontSize: 14 }}>AI</span>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav style={{ padding: 'var(--space-2) 10px', flex: 1, overflowY: 'auto' }}>
+      <nav style={{ padding: '0 12px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon
           const isActive = activePage === item.id
@@ -77,81 +84,94 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
                 alignItems: 'center',
                 gap: 12,
                 width: '100%',
-                padding: '10px 16px',
-                borderRadius: isActive ? '0 8px 8px 0' : 8,
+                padding: '12px 16px',
+                borderRadius: 'var(--r-sm)',
                 border: 'none',
-                borderLeft: isActive ? '3px solid var(--amber)' : '3px solid transparent',
                 cursor: 'pointer',
-                background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
+                background: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: isActive ? 'white' : 'var(--muted)',
                 fontFamily: "'DM Sans', sans-serif",
                 fontSize: 13,
-                fontWeight: 500,
-                marginBottom: 2,
-                transition: 'all 0.2s',
+                fontWeight: isActive ? 600 : 500,
+                transition: 'all 0.3s',
                 textAlign: 'left',
+                position: 'relative',
+                overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+                  e.currentTarget.style.color = 'var(--fog)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) {
                   e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--muted)'
                 }
               }}
             >
-              <Icon size={15} />
+              {isActive && (
+                 <motion.div
+                   layoutId="active-indicator"
+                   style={{
+                     position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3,
+                     background: 'var(--amber)', borderRadius: '0 4px 4px 0'
+                   }}
+                 />
+              )}
+              <Icon size={16} color={isActive ? "var(--amber)" : "currentcolor"} />
               <span style={{ flex: 1 }}>{item.label}</span>
-              {isActive && <ChevronRight size={13} style={{ opacity: 0.5 }} />}
+              {isActive && <ChevronRight size={14} style={{ opacity: 0.8, color: "var(--lavender)" }} />}
             </button>
           )
         })}
+        </div>
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '16px' }} />
+        <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)', margin: '24px 16px' }} />
 
         {/* Recent Workflows */}
-        <div>
+        <div style={{ padding: '0 8px' }}>
           <p
             className="font-mono"
             style={{
-              fontSize: 9,
+              fontSize: 10,
+              fontWeight: 700,
               color: 'var(--muted)',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              padding: '0 16px',
-              marginBottom: 10,
+              marginBottom: 16,
+              paddingLeft: 8
             }}
           >
-            Recent Journeys
+            Terminal History
           </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {RECENT_WORKFLOWS.map((wf, i) => (
             <motion.button
               key={wf.id}
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.06 }}
+              transition={{ delay: i * 0.08 }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 10,
                 width: '100%',
-                padding: '7px 16px',
-                borderRadius: 7,
+                padding: '8px 10px',
+                borderRadius: 'var(--r-sm)',
                 border: 'none',
                 cursor: 'pointer',
                 background: 'transparent',
                 color: 'var(--fog)',
                 fontFamily: "'DM Sans', sans-serif",
                 fontSize: 12.5,
-                marginBottom: 1,
                 textAlign: 'left',
-                transition: 'all 0.15s ease',
+                transition: 'all 0.2s',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
                 e.currentTarget.style.color = 'white'
               }}
               onMouseLeave={(e) => {
@@ -161,11 +181,12 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
             >
               <div
                 style={{
-                  width: 5,
-                  height: 5,
+                  width: 6,
+                  height: 6,
                   borderRadius: '50%',
-                  background: 'var(--border)',
+                  background: 'rgba(255,255,255,0.1)',
                   flexShrink: 0,
+                  transition: 'background 0.2s'
                 }}
               />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -173,13 +194,14 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
               </span>
             </motion.button>
           ))}
+          </div>
         </div>
       </nav>
 
       {/* Footer */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
-         <div className="font-mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>
-           Sefin · Pathfinder AI
+      <div style={{ padding: '24px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+         <div className="font-mono" style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+           PFDR-OS v2.0 · INTL
          </div>
       </div>
     </aside>
