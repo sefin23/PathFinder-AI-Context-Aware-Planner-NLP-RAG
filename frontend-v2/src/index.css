@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+:root {
+  /* Dark Forest Theme Tokens */
+  --forest-deep: #0d1a15;
+  --forest-mid:  #1a2f26;
+  --forest-card: #1e3529;
+  --forest-card2:#243d30;
+  --earth:       #2d4a3e;
+  --sage:        #5c8c75;
+  --fog:         #b8cfc7;
+  --amber:       #d47c3f;
+  --amber-light: #f0a96b;
+  --coral:       #c65d4a;
+  --lavender:    #7b6fa0;
+  --gold:        #c9a84c;
+  --paper:       #f7f4ee;
+  --mist:        #e8e4dc;
+  --ink:         #0d0f14;
+  --on-dark:     rgba(255,255,255,0.85);
+  --muted:       rgba(255,255,255,0.38);
+  --border:      rgba(255,255,255,0.08);
+
+  /* Mapping for legacy compatibility during transition */
+  --bg-primary: var(--forest-deep);
+  --bg-secondary: rgba(0,0,0,0.32); /* Sidebars */
+  --surface-card: var(--forest-card);
+  --accent: var(--amber);
+  --success: var(--sage);
+  --warning: var(--amber);
+  --error: var(--coral);
+
+  --text-primary: var(--on-dark);
+  --text-secondary: var(--fog);
+  --text-muted: var(--muted);
+
+  --border-subtle: var(--border);
+  --hover-surface: rgba(255, 255, 255, 0.05);
+
+  --r-sm: 6px; 
+  --r-md: 14px; 
+  --r-lg: 24px; 
+  --r-pill: 999px;
+  --sh-soft: 0 2px 16px rgba(0,0,0,0.3);
+  --sh-lift: 0 8px 40px rgba(0,0,0,0.45);
+  --sh-glow: 0 0 0 4px rgba(92,140,117,0.25);
+
+  /* Typography Scale */
+  --font-title: 28px;
+  --font-section: 18px;
+  --font-body: 14px;
+  --font-meta: 12px;
+
+  /* Spacing Grid (8px root) */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
+
+  /* Card Styles */
+  --card-radius: var(--r-md);
+  --card-padding: 24px;
+
+  /* Animation / Micro-interaction */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncier spring */
+  --duration-base: 250ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background-color: var(--forest-deep);
+  color: var(--on-dark);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Global utility classes for the new design system */
+.font-playfair {
+  font-family: 'Playfair Display', serif;
+}
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+.mbtn {
+  background: var(--amber);
+  color: white;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 9px 18px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(.34, 1.56, .64, 1);
+  display: inline-block;
+}
+.mbtn:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 6px 20px rgba(212,124,63,0.45);
+}
+.mbtn:active {
+  transform: scale(0.97);
+}
+.btn-cust {
+  background: transparent;
+  color: var(--fog);
+  border: 1.5px solid rgba(255,255,255,.14);
+  border-radius: var(--r-pill);
+  padding: 7px 14px;
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all .2s;
+}
+.btn-cust:hover {
+  border-color: rgba(255,255,255,.3);
+  color: white;
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(92,140,117,.15); }
+  50% { box-shadow: 0 0 0 6px rgba(92,140,117,.22); }
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(198,93,74,.5); }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(198,93,74,0); }
+}
+@keyframes pulseA {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,124,63,.5); }
+  50% { box-shadow: 0 0 0 5px rgba(212,124,63,0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scan {
+  0% { top: 0; opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
