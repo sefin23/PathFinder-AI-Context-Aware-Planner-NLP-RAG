@@ -1,7 +1,8 @@
 Pathfinder AI:
-A user is facing a life situation but doesn't know where to start. For example, the user types, I'm finishing college and moving to a new city for my first job and uploads their offer letter. The app understands the situation and breaks it into steps like documentation, accommodation, banking, and onboarding, with suggested timelines. As tasks are completed or circumstances change, the system updates the plan and shows what needs attention next, helping the user move forward without feeling overwhelmed.
 
-Pathfinder AI is a life-event oriented planning assistant built using a Retrieval-Augmented Generation (RAG) approach, where AI understanding is grounded in a structured knowledge base to generate explainable, user-controlled workflows for managing tasks, documents, and timelines across long-running life situations.
+A user is facing a life situation but doesn't know where to start. For example, the user types, "I'm finishing college and moving to a new city for my first job" and uploads their offer letter. PathFinder AI understands the situation and breaks it into steps like documentation, accommodation, banking, and onboarding, with suggested timelines. As tasks are completed or circumstances change, the system updates the plan and shows what needs attention next, helping the user move forward without feeling overwhelmed.
+
+PathFinder AI is a life-event oriented planning assistant built using a Retrieval-Augmented Generation (RAG) approach, where AI understanding is grounded in a structured knowledge base to generate explainable, user-controlled workflows for managing tasks, documents, and timelines across long-running life situations.
 
 The system supports:
 
@@ -86,9 +87,11 @@ Time & Background Processing:
 
 Frontend:
 
-- HTML & CSS — Simple, framework-free interface focused on clarity and long-term usability.
-- JavaScript — Handles dynamic task rendering, inline editing, grouped task views, and API communication.
-- Chart.js — Visualizes progress and completion status in a clear, intuitive way.
+- React 19 — Modern UI library used for building a responsive, component-based single-page application.
+- Vite — Lightning-fast build tool and development server.
+- Tailwind CSS — Utility-first CSS framework for rapid UI development and premium aesthetics.
+- Framer Motion — Industry-standard animation library for smooth, hardware-accelerated transitions.
+- Lucide React — Clean, consistent icon set for intuitive navigation.
 
 Developer Tooling:
 
