@@ -50,7 +50,6 @@ export default function TaskItem({
   }
 
   const handleHeaderClick = (e) => {
-    if (!subtasks.length) return
     if (e.target.closest('[data-no-expand]')) return
     setExpanded(prev => !prev)
   }
@@ -72,11 +71,11 @@ export default function TaskItem({
         border: 'none',
         borderLeft: `6px solid ${task.done ? '#ddd' : priorityColor}`,
         borderRadius: '4px',
-        marginBottom: 32,
+        marginBottom: 0,
         padding: 0,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'visible',
-        boxShadow: '0 25px 50px rgba(0,0,0,0.7)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         position: 'relative'
       }}
     >
@@ -87,7 +86,7 @@ export default function TaskItem({
           display: 'flex',
           alignItems: 'center',
           gap: 14,
-          padding: '14px 18px',
+          padding: '18px 18px',
           cursor: subtasks.length > 0 ? 'pointer' : 'default',
         }}
         className="group"
@@ -95,19 +94,19 @@ export default function TaskItem({
         {/* Expand toggle */}
         <button
           data-no-expand
-          onClick={() => subtasks.length > 0 && setExpanded(!expanded)}
+          onClick={() => setExpanded(!expanded)}
           style={{
             background: 'none',
             border: 'none',
-            cursor: subtasks.length > 0 ? 'pointer' : 'default',
-            color: subtasks.length > 0 ? '#999' : 'transparent',
+            cursor: 'pointer',
+            color: '#999',
             display: 'flex',
             padding: 2,
             flexShrink: 0,
             transition: 'color 0.2s',
           }}
-          onMouseEnter={e => { if(subtasks.length > 0) e.currentTarget.style.color = 'white'}}
-          onMouseLeave={e => { if(subtasks.length > 0) e.currentTarget.style.color = '#999'}}
+          onMouseEnter={e => { e.currentTarget.style.color = 'white'}}
+          onMouseLeave={e => { e.currentTarget.style.color = '#999'}}
         >
           {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </button>
@@ -220,7 +219,17 @@ export default function TaskItem({
           )}
           {/* Subtitle: description */}
           {task.description && !editing && (
-            <span style={{ fontSize: 13, color: 'var(--fog)', display: 'block', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: task.done ? 0.5 : 1 }}>
+            <span style={{ 
+              fontSize: 13, 
+              color: 'var(--fog)', 
+              display: '-webkit-box', 
+              WebkitLineClamp: 3, 
+              WebkitBoxOrient: 'vertical', 
+              marginTop: 8, 
+              lineHeight: '1.6',
+              overflow: 'hidden', 
+              opacity: task.done ? 0.5 : 0.8 
+            }}>
               {task.description}
             </span>
           )}
@@ -315,6 +324,19 @@ export default function TaskItem({
           />
         )}
 
+        {/* Cost estimate */}
+        {task.estimated_cost_min != null && task.estimated_cost_max > 0 && (
+          <span
+            data-no-expand
+            style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-mono)', flexShrink: 0, opacity: 0.75, letterSpacing: '0.01em' }}
+          >
+            {task.estimated_cost_min === task.estimated_cost_max
+              ? `₹${task.estimated_cost_min.toLocaleString('en-IN')}`
+              : `₹${task.estimated_cost_min.toLocaleString('en-IN')}–${task.estimated_cost_max.toLocaleString('en-IN')}`
+            }
+          </span>
+        )}
+
         {/* Delete (hover) */}
         <button
             data-no-expand
@@ -337,7 +359,7 @@ export default function TaskItem({
 
       {/* Subtask list — animated expand */}
       <AnimatePresence>
-        {expanded && subtasks.length > 0 && (
+        {expanded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -345,6 +367,11 @@ export default function TaskItem({
             transition={{ duration: 0.3 }}
             style={{ padding: '0 18px 14px', overflow: 'hidden' }}
           >
+            {subtasks.length === 0 && (
+              <div style={{ padding: '4px 0 12px 32px', opacity: 0.4, fontSize: 12, fontStyle: 'italic', color: 'var(--fog)' }}>
+                No subtasks defined. Add your first step below.
+              </div>
+            )}
             <SubtaskList
               subtasks={subtasks}
               onToggleDone={(sid) => onToggleSubtask?.(task.id, sid)}

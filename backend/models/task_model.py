@@ -26,6 +26,7 @@ class Task(Base):
 
     # Layer 3.3: Logical grouping for Phase View
     phase_title = Column(String, nullable=True)
+    phase_category = Column(String(50), nullable=True)  # Fixed enum: finance, legal, startup, etc.
 
     # Layer 2: full datetime deadline (nullable)
     due_date = Column(DateTime, nullable=True)
@@ -65,6 +66,9 @@ class Task(Base):
     estimated_cost_min = Column(Integer, nullable=True)  # Minimum cost in local currency
     estimated_cost_max = Column(Integer, nullable=True)  # Maximum cost in local currency
     cost_currency = Column(String(3), default="INR", nullable=True)  # Currency code (INR, USD, etc.)
+
+    # Email Tracking
+    nudge_sent_at = Column(DateTime, nullable=True)
 
     # Relationships
     life_event = relationship("LifeEvent", back_populates="tasks")

@@ -1,5 +1,5 @@
 /**
- * WorkflowCard â€” AI suggested workflow shown in the main workspace.
+ * WorkflowCard — AI suggested workflow shown in the main workspace.
  * Dark Forest styling: Playfair phases, glass backgrounds.
  */import React, { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
@@ -47,8 +47,8 @@ const CATEGORY_ORDER = [
   'General Preparation'
 ]
 
-const getPhaseEmoji = (phaseName = '') => {
-  return getEventVisuals(phaseName).emoji
+const getPhaseEmoji = (phaseName = '', category = null) => {
+  return getEventVisuals(phaseName, '', category).emoji
 }
 
 // Derive a meaningful phase name from a task title when the backend returns null/'General'
@@ -99,6 +99,7 @@ function normaliseTask(t, i) {
     urgency_score: t.urgency_score ?? null,
     suggested_due_offset_days: t.suggested_due_offset_days ?? t.due_offset_days ?? null,
     phase_title,
+    phase_category: t.phase_category ?? null,
     task_type: t.task_type ?? null,
     scheduled_date: t.scheduled_date ?? null,
     category: inferCategory(t.title ?? '', phase_title),
@@ -124,6 +125,13 @@ function PhaseStrip({ phases, tasks, selectedPhase, onSelectPhase, viewMode, the
     const doneCount = subs.filter(s => s.done).length
     return (doneCount / subs.length) * 100
   }
+
+  // Build phase_title → phase_category lookup from task data
+  const phaseCategoryMap = {}
+  tasks.forEach(t => {
+    if (t.phase_title && t.phase_category) phaseCategoryMap[t.phase_title] = t.phase_category
+    if (t.category && t.phase_category) phaseCategoryMap[t.category] = t.phase_category
+  })
 
   const phaseData = phases.map((phase, idx) => {
     const phaseTasks = tasks.filter(t => (viewMode === 'phase' ? t.category : (t.phase_title || 'General')) === phase)
@@ -179,7 +187,7 @@ function PhaseStrip({ phases, tasks, selectedPhase, onSelectPhase, viewMode, the
                 {idx > 0 && (
                   <div style={{
                     height: 3,
-                    width: 60,  // Increased slightly per request
+                    width: 60,
                     flexShrink: 0,
                     background: 'rgba(255,255,255,0.07)',
                     borderRadius: 2,
@@ -237,7 +245,7 @@ function PhaseStrip({ phases, tasks, selectedPhase, onSelectPhase, viewMode, the
 
                     {/* Phase Title (No Truncation) */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, opacity: 1 }}>
-                      <span style={{ fontSize: 24, flexShrink: 0 }}>{getPhaseEmoji(phase)}</span>
+                      <span style={{ fontSize: 24, flexShrink: 0 }}>{getPhaseEmoji(phase, phaseCategoryMap[phase])}</span>
                       <span style={{ 
                         fontSize: 15, 
                         fontWeight: 800, 
@@ -345,16 +353,15 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
   const [focusMode, setFocusMode]     = useState(false)
   const [viewMode, setViewMode]       = useState('timeline')
   const [hideCompleted, setHideCompleted] = useState(false)
-  const [isRefining, setIsRefining]   = useState(false)
-  const [refineText, setRefineText]   = useState('')
   const [startDate, setStartDate]     = useState(initialStartDate || new Date().toISOString().split('T')[0])
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [selectedPhase, setSelectedPhase]   = useState(null)
   const [celebrated, setCelebrated]   = useState({ 25: false, 50: false, 75: false, 100: false })
   const [microMsg, setMicroMsg]       = useState(null)
+  const [showTodayOnly, setShowTodayOnly] = useState(false)
   const [conflictModal, setConflictModal] = useState(null)
 
-  // â”€â”€ Task mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Task mutations ───────────────────────────────────────────────────────────
   const toggleTask      = useCallback((id) => {
     setTasks(p => p.map(t => {
       if (t.id === id) {
@@ -441,7 +448,7 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
         conflictModal.proposedDate
       )
       
-      // Re-fetch or update local tasks (simplified here by just updating the one task)
+      // Update local tasks
       setTasks(prev => prev.map(t => t.id === conflictModal.task.id ? {
         ...t,
         scheduled_date: result.scheduled_date,
@@ -487,7 +494,8 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
   })()
 
   const visibleTasks   = hideCompleted ? normalisedTasks.filter(t => !t.done) : normalisedTasks
-  const phaseFiltered = selectedPhase ? visibleTasks.filter(t => (viewMode === 'phase' ? t.category : t.phase_title) === selectedPhase) : visibleTasks
+  const todayOnlyTasks = showTodayOnly ? visibleTasks.filter(t => (t.suggested_due_offset_days || 0) <= 0) : visibleTasks;
+  const phaseFiltered = selectedPhase ? todayOnlyTasks.filter(t => (viewMode === 'phase' ? t.category : t.phase_title) === selectedPhase) : todayOnlyTasks
 
   const displayTasks   = (() => {
     if (viewMode === 'timeline') {
@@ -504,7 +512,7 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
 
   const allTasksCount  = tasks.length
   
-  // High-resolution progress calculation (User: subtasks move percentage)
+  // High-resolution progress calculation
   const calculateTaskProgressRaw = (t) => {
     if (t.done) return 100
     const subs = t.subtasks || []
@@ -519,24 +527,23 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
 
   const completedCount = tasks.filter(t => t.done).length
   
-  // Trigger celebrations (Item 15)
+  // Trigger celebrations
   if (overallProgress >= 100 && !celebrated[100] && allTasksCount > 0) {
     setCelebrated(prev => ({ ...prev, 100: true }))
   } else if (overallProgress >= 75 && !celebrated[75]) {
-    setMicroMsg({ text: "Final Stretch! ðŸ›¡ï¸", color: 'var(--emerald)' })
+    setMicroMsg({ text: "Final Stretch! 🛡️", color: 'var(--emerald)' })
     setCelebrated(prev => ({ ...prev, 75: true }))
     setTimeout(() => setMicroMsg(null), 4000)
   } else if (overallProgress >= 50 && !celebrated[50]) {
-    setMicroMsg({ text: "Halfway Secured! ðŸ", color: 'var(--amber)' })
+    setMicroMsg({ text: "Halfway Secured! 🏚️", color: 'var(--amber)' })
     setCelebrated(prev => ({ ...prev, 50: true }))
     setTimeout(() => setMicroMsg(null), 4000)
   } else if (overallProgress >= 25 && !celebrated[25]) {
-    setMicroMsg({ text: "Strong Start! ðŸš€", color: '#0EA5E9' })
+    setMicroMsg({ text: "Strong Start! 🚀", color: '#0EA5E9' })
     setCelebrated(prev => ({ ...prev, 25: true }))
     setTimeout(() => setMicroMsg(null), 4000)
   }
 
-  // Helper for category-specific progress (Step 5.1)
   const getCategoryProgress = (catTitle) => {
     const catTasks = tasks.filter(t => (viewMode === 'phase' ? t.category : (t.phase_title || 'General')) === (catTitle || 'General'))
     const progressSum = catTasks.reduce((acc, t) => acc + calculateTaskProgressRaw(t), 0)
@@ -562,7 +569,7 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
         overflow: 'hidden'
       }}
     >
-      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Header ────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 32 }}>
         <div style={{ flex: 1 }}>
           <p className="font-mono" style={{ fontSize: 10, color: 'var(--sage)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
@@ -576,93 +583,99 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
           </p>
         </div>
 
-        {/* Action Toggles */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--r-md)', padding: 4, marginRight: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
-             <button
-                onClick={() => setViewMode('timeline')}
-                className="btn-cust"
-                style={{
-                  padding: '8px 14px', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8,
-                  borderRadius: 8, 
-                  background: viewMode === 'timeline' ? 'rgba(92,140,117,0.15)' : 'transparent',
-                  color: viewMode === 'timeline' ? 'var(--sage)' : 'var(--muted)',
-                  border: viewMode === 'timeline' ? '1px solid rgba(92,140,117,0.3)' : '1px solid transparent',
-                  boxShadow: viewMode === 'timeline' ? '0 0 15px rgba(92,140,117,0.15)' : 'none',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-             >
-                <Clock size={14} color={viewMode === 'timeline' ? 'var(--sage)' : 'currentColor'} /> Timeline View
-             </button>
-             <button
-                onClick={() => setViewMode('phase')}
-                className="btn-cust"
-                style={{
-                  padding: '8px 14px', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8,
-                  borderRadius: 8,
-                  background: viewMode === 'phase' ? 'rgba(212,124,63,0.15)' : 'transparent',
-                  color: viewMode === 'phase' ? 'var(--amber)' : 'var(--muted)',
-                  border: viewMode === 'phase' ? '1px solid rgba(212,124,63,0.3)' : '1px solid transparent',
-                  boxShadow: viewMode === 'phase' ? '0 0 15px rgba(212,124,63,0.15)' : 'none',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-             >
-                <Layers size={14} color={viewMode === 'phase' ? 'var(--amber)' : 'currentColor'} /> Category View
-             </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 4, border: '1px solid rgba(255,255,255,0.08)' }}>
+             {[
+               { id: 'timeline', label: 'Timeline', icon: <Clock size={16} />, color: 'var(--emerald)' },
+               { id: 'phase', label: 'Category', icon: <Layers size={16} />, color: 'var(--amber)' },
+               approved && { id: 'today', label: 'Today', icon: <Focus size={16} />, color: 'var(--amber)' }
+             ].filter(Boolean).map(v => {
+               const isCurrent = (v.id === 'today' && showTodayOnly) || (v.id === viewMode && !showTodayOnly)
+               return (
+                 <button
+                   key={v.id}
+                   onClick={() => { 
+                     if (v.id === 'today') { 
+                       setShowTodayOnly(true); 
+                       setSelectedPhase(null);
+                     } else { 
+                       setViewMode(v.id); 
+                       setShowTodayOnly(false); 
+                     }
+                   }}
+                   style={{
+                     padding: '10px 18px',
+                     fontSize: 13,
+                     fontWeight: 700,
+                     display: 'flex',
+                     alignItems: 'center',
+                     gap: 8,
+                     borderRadius: 10,
+                     background: isCurrent ? 'rgba(255,255,255,0.1)' : 'transparent',
+                     color: isCurrent ? v.color : 'var(--muted)',
+                     border: 'none',
+                     cursor: 'pointer',
+                     transition: 'all 0.2s ease'
+                   }}
+                 >
+                   {v.icon} {v.label}
+                 </button>
+               )
+             })}
           </div>
 
-          <AnimatePresence>
-            {(selectedPhase || hideCompleted) && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.9, x: -5 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.9, x: -5 }}
-                onClick={() => { setSelectedPhase(null); setHideCompleted(false); }}
-                title="Clear Filters"
-                className="btn-cust"
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: 5, fontSize: 11,
-                  background: 'rgba(216, 110, 110, 0.1)',
-                  borderColor: 'rgba(216, 110, 110, 0.3)',
-                  color: 'var(--coral)',
-                  height: 34
-                }}
-              >
-                <RefreshCw size={11} /> Clear
-              </motion.button>
-            )}
-          </AnimatePresence>
-          <button
-            onClick={() => setFocusMode(f => !f)}
-            title="Focus on top task"
-            className="btn-cust"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              borderColor: focusMode ? 'var(--amber)' : 'rgba(255,255,255,0.14)',
-              color: focusMode ? 'white' : 'var(--fog)',
-              background: focusMode ? 'var(--amber)' : 'transparent',
-            }}
-          >
-            <Focus size={11} /> Focus
-          </button>
-          <button
-            onClick={() => setHideCompleted(h => !h)}
-            title={hideCompleted ? 'Show completed' : 'Hide completed'}
-            className="btn-cust"
-            style={{ display: 'flex', alignItems: 'center', gap: 5 }}
-          >
-            {hideCompleted ? <EyeOff size={11} /> : <Eye size={11} />}
-            {hideCompleted ? 'Show all' : 'Hide done'}
-          </button>
+          {approved && (
+            <button
+              onClick={() => setFocusMode(f => !f)}
+              style={{
+                padding: '10px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                borderRadius: 10,
+                background: focusMode ? 'var(--amber)' : 'rgba(255,255,255,0.04)',
+                color: focusMode ? 'black' : 'white',
+                border: '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Focus size={16} /> Focus
+            </button>
+          )}
+          
+          {approved && (
+            <button
+              onClick={() => setHideCompleted(h => !h)}
+              style={{
+                padding: '10px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {hideCompleted ? <EyeOff size={16} /> : <Eye size={16} />} 
+              {hideCompleted ? 'Show all' : 'Hide done'}
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{
          position: 'relative',
-         paddingLeft: 28, // space for the SVG line
+         paddingLeft: 28,
          marginBottom: 20
       }}>
-        {/* â”€â”€ Phase Strip â”€â”€ */}
         {phases.length > 0 && (
           <PhaseStrip
             phases={phases}
@@ -676,30 +689,28 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
         )}
 
 
-         {/* â”€â”€ Journey Progress Bar (Step 5.1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
          <div style={{ marginBottom: 32 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
                <div>
-                  <h4 className="font-mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0, opacity: 0.8 }}>
+                  <h4 className="font-mono" style={{ fontSize: 12, fontWeight: 800, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.15em', margin: 0, opacity: 0.9 }}>
                      Event Progress
                   </h4>
                   <motion.p 
                      key={overallProgress}
-                     initial={{ scale: 0.95, opacity: 0.8 }}
+                     initial={{ scale: 0.98, opacity: 0.8 }}
                      animate={{ scale: 1, opacity: 1 }}
                      className="font-playfair" 
-                     style={{ fontSize: 16, fontWeight: 700, color: 'white', margin: '2px 0 0 0' }}
-                  >
+                     style={{ fontSize: 32, fontWeight: 900, color: 'white', margin: '4px 0 0 0', lineHeight: 1.1 }}
+                   >
                      {overallProgress}% Roadmap complete
                   </motion.p>
                </div>
-               <span className="font-mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
+               <span className="font-mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--amber)', alignSelf: 'flex-end', marginBottom: 2 }}>
                   {completedCount} / {allTasksCount}
                </span>
             </div>
             
             <div style={{ position: 'relative' }}>
-               {/* Micro Celebration Bubble */}
                <AnimatePresence>
                  {microMsg && (
                    <motion.div
@@ -741,7 +752,6 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
             </div>
          </div>
 
-         {/* â”€â”€ Celebration Overlay (Item 15) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
          <AnimatePresence>
             {overallProgress >= 100 && (
               <motion.div
@@ -761,7 +771,7 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
                   transition={{ type: 'spring', damping: 12 }}
                   style={{ position: 'relative', zIndex: 10 }}
                 >
-                  <div style={{ fontSize: 60, marginBottom: 10 }}>ðŸŽ‰</div>
+                  <div style={{ fontSize: 60, marginBottom: 10 }}>🎉</div>
                   <h2 className="font-playfair" style={{ fontSize: 42, fontWeight: 800, color: 'white', margin: 0, textShadow: '0 0 20px rgba(255,191,0,0.3)' }}>
                     Mission Accomplished!
                   </h2>
@@ -824,307 +834,265 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
             )}
          </AnimatePresence>
 
-         {/* â”€â”€ Approval banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+         {/* ── Approval banner ────────────────────────────────────────────────── */}
          {!approved && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24, padding: '14px 18px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.14)' }}>
-               {isRefining ? (
-                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                   <input
-                     autoFocus
-                     value={refineText}
-                     onChange={e => setRefineText(e.target.value)}
-                     placeholder="E.g., Include steps for bringing a pet..."
-                     style={{
-                       flex: 1,
-                       background: 'rgba(255,255,255,0.05)',
-                       border: '1px solid rgba(255,255,255,0.2)',
-                       color: 'white',
-                       padding: '8px 12px',
-                       borderRadius: 8,
-                       outline: 'none',
-                       fontSize: 13,
-                       fontFamily: "'DM Sans', sans-serif"
-                     }}
-                     onKeyDown={e => {
-                       if (e.key === 'Enter' && refineText.trim()) {
-                         onRegenerate?.(refineText.trim());
-                         setIsRefining(false);
-                         setRefineText('');
-                       }
-                       if (e.key === 'Escape') setIsRefining(false);
-                     }}
-                   />
-                   <button
-                     onClick={() => {
-                       if (refineText.trim()) {
-                         onRegenerate?.(refineText.trim());
-                         setIsRefining(false);
-                         setRefineText('');
-                       }
-                     }}
-                     className="btn-cust"
-                     style={{ background: 'var(--amber)', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}
-                   >
-                     Update
-                   </button>
-                   <button
-                     onClick={() => setIsRefining(false)}
-                     className="btn-cust"
-                     style={{ background: 'transparent', color: 'var(--muted)', padding: '8px', fontSize: 13, border: 'none', cursor: 'pointer' }}
-                   >
-                     Cancel
-                   </button>
-                 </div>
-               ) : (
-                 <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                   <p style={{ fontSize: 12, color: 'var(--fog)', flex: 1, margin: 0, lineHeight: 1.5 }}>
-                     Look through the tasks below. Mark completed ones, adjust anything if needed, then approve to start tracking your progress.
-                   </p>
-                    <div style={{ display: 'flex', gap: 7, flexShrink: 0, alignItems: 'center' }}>
-                       <div style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <p style={{ fontSize: 14, color: 'var(--fog)', flex: 1, margin: 0, lineHeight: 1.6, fontWeight: 500 }}>
+                  Look through the tasks below. Mark completed ones, adjust anything if needed, then approve to start tracking your progress.
+                </p>
+                <div style={{ display: 'flex', gap: 7, flexShrink: 0, alignItems: 'center' }}>
+                  <div style={{ position: 'relative' }}>
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!approved) setShowStartPicker(!showStartPicker);
+                      }}
+                      style={{ 
+                        display: 'flex', alignItems: 'center', gap: 8, 
+                        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', 
+                        padding: '4px 12px', borderRadius: 8, height: 32, 
+                        cursor: approved ? 'default' : 'pointer', minWidth: 140 
+                      }}
+                    >
+                      <Calendar size={12} color="var(--emerald)" />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Start:</span>
+                      <span style={{ color: 'white', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                        {startDate ? new Date(startDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'dd-mm-yyyy'}
+                      </span>
+                    </div>
+                    
+                    <AnimatePresence>
+                      {showStartPicker && (
+                        <div style={{ position: 'absolute', bottom: '100%', right: 0, zIndex: 1000, marginBottom: 10 }}>
                           <div 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!approved) setShowStartPicker(!showStartPicker);
+                            style={{ position: 'fixed', inset: 0, zIndex: -1 }} 
+                            onClick={() => setShowStartPicker(false)} 
+                          />
+                          <CustomDarkCalendar 
+                            selectedDate={startDate ? new Date(startDate) : new Date()}
+                            onSelect={(date) => {
+                              const isoStr = date.toISOString().split('T')[0]
+                              setStartDate(isoStr)
+                              setShowStartPicker(false)
                             }}
-                            style={{ 
-                              display: 'flex', alignItems: 'center', gap: 8, 
-                              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', 
-                              padding: '4px 12px', borderRadius: 8, height: 32, 
-                              cursor: approved ? 'default' : 'pointer', minWidth: 140 
-                            }}
-                          >
-                            <Calendar size={12} color="var(--emerald)" />
-                            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase' }}>Start:</span>
-                            <span style={{ color: 'white', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                              {startDate ? new Date(startDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'dd-mm-yyyy'}
-                            </span>
-                          </div>
-                          
-                          <AnimatePresence>
-                            {showStartPicker && (
-                               <div style={{ position: 'absolute', bottom: '100%', right: 0, zIndex: 1000, marginBottom: 10 }}>
-                                  <div 
-                                    style={{ position: 'fixed', inset: 0, zIndex: -1 }} 
-                                    onClick={() => setShowStartPicker(false)} 
-                                  />
-                                  <CustomDarkCalendar 
-                                    selectedDate={startDate ? new Date(startDate) : new Date()}
-                                    onSelect={(date) => {
-                                      const isoStr = date.toISOString().split('T')[0]
-                                      setStartDate(isoStr)
-                                      setShowStartPicker(false)
-                                    }}
-                                    onClose={() => setShowStartPicker(false)}
-                                    // Custom style via prop to ensure it pops UP
-                                    style={{ bottom: '0', top: 'auto', marginBottom: 12 }}
-                                  />
-                               </div>
-                            )}
-                          </AnimatePresence>
-                       </div>
-                       <button
-                         onClick={() => setIsRefining(true)}
-                         title="Refine Request"
-                         className="btn-cust"
-                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                      >
-                         <RefreshCw size={12}/> Refine
-                      </button>
-                     <button
-                        onClick={() => onRegenerate?.()}
-                        title="Start Over completely"
-                        className="btn-cust"
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.6 }}
-                     >
-                        Restart
-                     </button>
-                     <motion.button
-                       whileHover={{ scale: 1.03, y: -2 }} whileTap={{ scale: 0.97 }}
-                       onClick={() => onApprove?.(tasks, startDate)}
-                       disabled={approving}
-                       className="mbtn"
-                       style={{
-                         display: 'flex', alignItems: 'center', gap: 6,
-                         opacity: approving ? 0.7 : 1, cursor: approving ? 'wait' : 'pointer'
-                       }}
-                     >
-                       {approving
-                         ? <><Loader2 size={12} style={{animation:'spin 1s linear infinite'}}/> Packing...</>
-                         : <><Play size={10} fill="currentColor"/> Approve & Start</>
-                       }
-                     </motion.button>
-                   </div>
-                 </div>
-               )}
+                            onClose={() => setShowStartPicker(false)}
+                            style={{ bottom: '0', top: 'auto', marginBottom: 12 }}
+                          />
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <button
+                    onClick={() => onRegenerate?.()}
+                    title="Start Over completely"
+                    className="btn-cust restart-btn-hover"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 6,
+                      background: 'rgba(212,124,63,0.05)', 
+                      border: '1px solid rgba(212,124,63,0.3)',
+                      padding: '8px 20px', 
+                      borderRadius: 10, 
+                      fontSize: 13, 
+                      fontWeight: 700,
+                      color: 'var(--amber)',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    Restart
+                  </button>
+                  <motion.button
+                    whileHover={{ scale: 1.03, y: -2 }} whileTap={{ scale: 0.97 }}
+                    onClick={() => onApprove?.(tasks, startDate)}
+                    disabled={approving}
+                    className="mbtn"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 24px', borderRadius: 14,
+                      background: 'linear-gradient(135deg, var(--amber) 0%, #E68A5C 100%)',
+                      border: 'none', color: 'white', fontSize: 13, fontWeight: 700,
+                      opacity: approving ? 0.7 : 1, cursor: approving ? 'wait' : 'pointer',
+                      boxShadow: '0 4px 15px rgba(212,123,73,0.3)'
+                    }}
+                  >
+                    {approving
+                      ? <><Loader2 size={12} className="animate-spin"/> Packing...</>
+                      : <><Play size={12} fill="white"/> Approve & Start</>
+                    }
+                  </motion.button>
+                </div>
+              </div>
             </div>
          )}
+
          {/* Approved badge */}
          {approved && (
-             <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}}
-                style={{ display:'flex', alignItems:'center', gap:12, padding:'16px 20px', borderRadius:14, marginBottom:28, background:'rgba(92,140,117,0.18)', border:'1px solid rgba(92,140,117,0.35)', boxShadow: '0 0 20px rgba(92,140,117,0.1)' }}
-             >
-                <div style={{ background: 'var(--sage)', borderRadius: '50%', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CheckCircle2 size={18} color="black"/>
-                </div>
-                <div style={{ flex: 1 }}>
-                   <p style={{fontSize:14, fontWeight:700, color:'white', margin: 0}}>Event successfully secured!</p>
-                   <p style={{fontSize:12, color:'var(--sage)', margin: '2px 0 0 0', opacity: 0.9}}>This roadmap has been added to your <strong>Saved Plans</strong> for permanent tracking.</p>
-                </div>
-                <button 
-                  onClick={() => onNavigate?.('saved')}
-                  className="btn-cust"
-                  style={{ fontSize: 11, padding: '6px 16px', borderColor: 'var(--sage)', color: 'var(--sage)', fontWeight: 800 }}
-                >
-                  View Event History
-                </button>
-             </motion.div>
-         )}
-
-         {/* â”€â”€ Focus Mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-         <AnimatePresence>
-            {focusMode && <FocusModePanel tasks={tasks} />}
-         </AnimatePresence>
-
-         {/* â”€â”€ Phase-based task list with drag-and-drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-         {!focusMode && (
-            <div>
-               {visibleTasks.length === 0 ? (
-                 <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>
-                   {hideCompleted ? 'All tasks complete! ðŸŽ‰' : 'No tasks to display.'}
-                 </p>
-               ) : (() => {
-                  const isCategoryMode = viewMode === 'phase';
-                  
-                  if (!isCategoryMode) {
-                    const dayGroups = []
-                    displayTasks.forEach(t => {
-                      const d = t.suggested_due_offset_days ?? 0
-                      if (!dayGroups.length || dayGroups[dayGroups.length - 1].day !== d) {
-                        dayGroups.push({ day: d, tasks: [t] })
-                      } else {
-                        dayGroups[dayGroups.length - 1].tasks.push(t)
-                      }
-                    })
-
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: 0 }}>
-                        {dayGroups.map((group, gIdx) => (
-                          <div key={`${group.day}-${gIdx}`} style={{ position: 'relative' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                              <span className="font-mono" style={{ fontSize: 11, fontWeight: 900, color: 'var(--sage)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                                Day {group.day}
-                              </span>
-                              <div style={{ flex: 1, height: 1, background: 'rgba(92,140,117,0.1)' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                              {group.tasks.map((task, tIdx) => (
-                                <TaskItem
-                                  key={task.id} task={task} index={tIdx} isRecommended={task.id === recommendedId}
-                                  hideCompleted={hideCompleted} onToggleDone={toggleTask} onEditTitle={editTaskTitle}
-                                  onEditPriority={editTaskPriority} onEditDays={editTaskDays} onDeleteTask={deleteTask}
-                                  onToggleSubtask={toggleSubtask} onEditSubtask={editSubtask} onEditSubtaskPriority={editSubtaskPriority}
-                                  onEditSubtaskDays={editSubtaskDays} onAddSubtask={addSubtask} onDeleteSubtask={deleteSubtask}
-                                  onReorderSubtasks={reorderSubtasks}
-                                  onEditScheduledDate={handleScheduledDateChange}
-                                  startDate={startDate}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  }
-
-                  // Category View - Grouped into Unified Cards
-                  const phaseGroups = [];
-                  displayTasks.forEach(task => {
-                    const groupKey = viewMode === 'phase' ? task.category : (task.phase_title || 'General');
-                    const last = phaseGroups[phaseGroups.length - 1];
-                    if (last && last.phase === groupKey) {
-                      last.tasks.push(task);
-                    } else {
-                      phaseGroups.push({ phase: groupKey, tasks: [task] });
-                    }
-                  });
-
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingLeft: 30, position: 'relative' }}>
-                      <div style={{ position: 'absolute', left: 17, top: 0, bottom: 0, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1, zIndex: 1 }} />
-                      
-                      {phaseGroups.map((group, gIdx) => {
-                        const { phase, tasks: gTasks } = group;
-                        const progress = getCategoryProgress(phase);
-                        
-                        return (
-                          <div key={`${phase}-${gIdx}`} style={{ position: 'relative' }}>
-                            <div style={{
-                              position: 'absolute', left: -24, top: 24, transform: 'translateY(-50%)',
-                              width: 24, height: 24, borderRadius: '50%', background: 'var(--amber)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              border: '3px solid var(--forest-card)', zIndex: 5,
-                              boxShadow: '0 0 10px rgba(212,124,63,0.3)', opacity: 0.9
-                            }}>
-                              <ChevronsRight size={12} strokeWidth={3} color="black" />
-                            </div>
-
-                            <motion.div
-                              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                              transition={{ duration: 0.4, delay: gIdx * 0.1 }}
-                              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, overflow: 'hidden' }}
-                            >
-                              <div style={{ padding: '16px 20px', background: 'rgba(212,124,63,0.04)', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                <span className="font-mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.15em', opacity: 0.8 }}>
-                                  {viewMode === 'phase' ? 'TASK CATEGORIES' : 'TIMELINE STAGE'}: {phase.replace(/_/g, ' ')}
-                                </span>
-                                <span className="font-mono" style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(212, 124, 63, 0.08)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(212, 124, 63, 0.2)' }}>
-                                  {progress.pct}%
-                                </span>
-                              </div>
-
-                              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <Reorder.Group
-                                  axis="y"
-                                  values={gTasks}
-                                  onReorder={(newOrder) => {
-                                    setTasks(prev => {
-                                      const groupIds = new Set(gTasks.map(t => t.id));
-                                      const idToTask = new Map(prev.map(t => [t.id, t]));
-                                      const reorderedGroup = newOrder.map(t => idToTask.get(t.id));
-                                      const others = prev.filter(t => !groupIds.has(t.id));
-                                      return [...others, ...reorderedGroup];
-                                    });
-                                  }}
-                                >
-                                  {gTasks.map((task, tIdx) => (
-                                    <Reorder.Item key={`${task.id}-${tIdx}`} value={task} style={{ listStyle: 'none' }}>
-                                  <TaskItem
-                                    key={task.id} task={task} index={tIdx} isRecommended={task.id === recommendedId}
-                                    hideCompleted={hideCompleted} onToggleDone={toggleTask} onEditTitle={editTaskTitle}
-                                    onEditPriority={editTaskPriority} onEditDays={editTaskDays} onDeleteTask={deleteTask}
-                                    onToggleSubtask={toggleSubtask} onEditSubtask={editSubtask} onEditSubtaskPriority={editSubtaskPriority}
-                                    onEditSubtaskDays={editSubtaskDays} onAddSubtask={addSubtask} onDeleteSubtask={deleteSubtask}
-                                    onReorderSubtasks={reorderSubtasks}
-                                    onEditScheduledDate={handleScheduledDateChange}
-                                    startDate={startDate}
-                                  />
-                                    </Reorder.Item>
-                                  ))}
-                                </Reorder.Group>
-                              </div>
-                            </motion.div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()
-               }
-
-            </div>
+            <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}}
+               style={{ display:'flex', alignItems:'center', gap:12, padding:'16px 20px', borderRadius:14, marginBottom:28, background:'rgba(92,140,117,0.18)', border:'1px solid rgba(92,140,117,0.35)', boxShadow: '0 0 20px rgba(92,140,117,0.1)' }}
+            >
+               <div style={{ background: 'var(--sage)', borderRadius: '50%', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 <CheckCircle2 size={18} color="black"/>
+               </div>
+               <div style={{ flex: 1 }}>
+                  <p style={{fontSize:14, fontWeight:700, color:'white', margin: 0}}>Event successfully secured!</p>
+                  <p style={{fontSize:12, color:'var(--sage)', margin: '2px 0 0 0', opacity: 0.9}}>This roadmap has been added to your <strong>Saved Plans</strong> for permanent tracking.</p>
+               </div>
+               <button 
+                 onClick={() => onNavigate?.('saved')}
+                 className="btn-cust"
+                 style={{ fontSize: 11, padding: '6px 16px', borderColor: 'var(--sage)', color: 'var(--sage)', fontWeight: 800 }}
+               >
+                 View Event History
+               </button>
+            </motion.div>
          )}
       </div>
+
+      <AnimatePresence>
+        {focusMode && <FocusModePanel tasks={tasks} />}
+      </AnimatePresence>
+
+      {!focusMode && (
+         <div>
+            {visibleTasks.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>
+                {hideCompleted ? 'All tasks complete! 🎉' : 'No tasks to display.'}
+              </p>
+            ) : (() => {
+               const isCategoryMode = viewMode === 'phase';
+               
+               if (!isCategoryMode) {
+                 const dayGroups = []
+                 displayTasks.forEach(t => {
+                   const d = t.suggested_due_offset_days ?? 0
+                   if (!dayGroups.length || dayGroups[dayGroups.length - 1].day !== d) {
+                     dayGroups.push({ day: d, tasks: [t] })
+                   } else {
+                     dayGroups[dayGroups.length - 1].tasks.push(t)
+                   }
+                 })
+
+                 return (
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: 0 }}>
+                     {dayGroups.map((group, gIdx) => (
+                       <div key={`${group.day}-${gIdx}`} style={{ position: 'relative' }}>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                           <span className="font-mono" style={{ fontSize: 11, fontWeight: 900, color: 'var(--sage)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+                             Day {group.day}
+                           </span>
+                           <div style={{ flex: 1, height: 1, background: 'rgba(92,140,117,0.1)' }} />
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                           {group.tasks.map((task, tIdx) => (
+                             <TaskItem
+                               key={task.id} task={task} index={tIdx} isRecommended={task.id === recommendedId}
+                               hideCompleted={hideCompleted} onToggleDone={toggleTask} onEditTitle={editTaskTitle}
+                               onEditPriority={editTaskPriority} onEditDays={editTaskDays} onDeleteTask={deleteTask}
+                               onToggleSubtask={toggleSubtask} onEditSubtask={editSubtask} onEditSubtaskPriority={editSubtaskPriority}
+                               onEditSubtaskDays={editSubtaskDays} onAddSubtask={addSubtask} onDeleteSubtask={deleteSubtask}
+                               onReorderSubtasks={reorderSubtasks}
+                               onEditScheduledDate={handleScheduledDateChange}
+                               startDate={startDate}
+                             />
+                           ))}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 )
+               }
+
+               // Category View - Grouped into Unified Cards
+               const phaseGroups = [];
+               displayTasks.forEach(task => {
+                 const groupKey = viewMode === 'phase' ? task.category : (task.phase_title || 'General');
+                 const last = phaseGroups[phaseGroups.length - 1];
+                 if (last && last.phase === groupKey) {
+                   last.tasks.push(task);
+                 } else {
+                   phaseGroups.push({ phase: groupKey, tasks: [task] });
+                 }
+               });
+
+               return (
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingLeft: 30, position: 'relative' }}>
+                   <div style={{ position: 'absolute', left: 17, top: 0, bottom: 0, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1, zIndex: 1 }} />
+                   
+                   {phaseGroups.map((group, gIdx) => {
+                     const { phase, tasks: gTasks } = group;
+                     const progress = getCategoryProgress(phase);
+                     
+                     return (
+                       <div key={`${phase}-${gIdx}`} style={{ position: 'relative' }}>
+                         <div style={{
+                           position: 'absolute', left: -24, top: 24, transform: 'translateY(-50%)',
+                           width: 24, height: 24, borderRadius: '50%', background: 'var(--amber)',
+                           display: 'flex', alignItems: 'center', justifyContent: 'center',
+                           border: '3px solid var(--forest-card)', zIndex: 5,
+                           boxShadow: '0 0 10px rgba(212,124,63,0.3)', opacity: 0.9
+                         }}>
+                           <ChevronsRight size={12} strokeWidth={3} color="black" />
+                         </div>
+
+                         <motion.div
+                           initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                           transition={{ duration: 0.4, delay: gIdx * 0.1 }}
+                           style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, overflow: 'hidden' }}
+                         >
+                           <div style={{ padding: '16px 20px', background: 'rgba(212,124,63,0.04)', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                             <span className="font-mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.15em', opacity: 0.8 }}>
+                               {viewMode === 'phase' ? 'TASK CATEGORIES' : 'TIMELINE STAGE'}: {phase.replace(/_/g, ' ')}
+                             </span>
+                             <span className="font-mono" style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, color: 'var(--amber)', background: 'rgba(212, 124, 63, 0.08)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(212, 124, 63, 0.2)' }}>
+                               {progress.pct}%
+                             </span>
+                           </div>
+
+                           <div style={{ padding: '12px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                             <Reorder.Group
+                               axis="y"
+                               values={gTasks}
+                               onReorder={(newOrder) => {
+                                 setTasks(prev => {
+                                   const groupIds = new Set(gTasks.map(t => t.id));
+                                   const idToTask = new Map(prev.map(t => [t.id, t]));
+                                   const reorderedGroup = newOrder.map(t => idToTask.get(t.id));
+                                   const others = prev.filter(t => !groupIds.has(t.id));
+                                   return [...others, ...reorderedGroup];
+                                 });
+                               }}
+                             >
+                               {gTasks.map((task, tIdx) => (
+                                 <Reorder.Item key={`${task.id}-${tIdx}`} value={task} style={{ listStyle: 'none' }}>
+                               <TaskItem
+                                 key={task.id} task={task} index={tIdx} isRecommended={task.id === recommendedId}
+                                 hideCompleted={hideCompleted} onToggleDone={toggleTask} onEditTitle={editTaskTitle}
+                                 onEditPriority={editTaskPriority} onEditDays={editTaskDays} onDeleteTask={deleteTask}
+                                 onToggleSubtask={toggleSubtask} onEditSubtask={editSubtask} onEditSubtaskPriority={editSubtaskPriority}
+                                 onEditSubtaskDays={editSubtaskDays} onAddSubtask={addSubtask} onDeleteSubtask={deleteSubtask}
+                                 onReorderSubtasks={reorderSubtasks}
+                                 onEditScheduledDate={handleScheduledDateChange}
+                                 startDate={startDate}
+                               />
+                                 </Reorder.Item>
+                               ))}
+                             </Reorder.Group>
+                           </div>
+                         </motion.div>
+                       </div>
+                     );
+                   })}
+                 </div>
+               );
+             })()
+            }
+
+         </div>
+      )}
 
       <AnimatePresence>
         {conflictModal && (
@@ -1213,5 +1181,3 @@ function ConflictResolutionModal({ task, conflictingTasks, proposedDate, onResol
     </motion.div>
   )
 }
-
-

@@ -154,7 +154,13 @@ cython_debug/
 test.db
 .qodo/
 .agent/
+.claude/
+.gemini/
+.gitnexus/
+.cursor/
 .editorconfig
+AGENTS.md
+CLAUDE.md
 
 # Sandbox folder
 test_backend/
@@ -168,3 +174,8 @@ gemini_models_results.txt
 test.jsx
 full_sweep.py
 replace_workflow_card_calendar.ps1
+
+# Database
+backend/sql_app.db
+backend/database.db
+backend/data/ai_cache.json

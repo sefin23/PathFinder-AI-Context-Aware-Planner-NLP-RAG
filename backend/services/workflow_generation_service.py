@@ -44,7 +44,55 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_GENERATION_MODEL = "gemini-2.0-flash-lite"
+_GENERATION_MODEL = "gemini-2.0-flash"
+
+_AI_FIRST_SYSTEM_PROMPT = """\
+You are Pathfinder AI, a life-event workflow planner.
+
+The user has described a goal or life event. Generate a practical, personalized, step-by-step task workflow using your broad general knowledge.
+
+RULES:
+- Create a realistic, actionable roadmap that directly addresses the user's specific goal.
+- Break the goal into logical phases (e.g. for learning Python: Foundation → Core Skills → Projects → Portfolio).
+- Each task should have 2-4 concrete subtasks.
+- Keep task descriptions to 1-2 sentences max. Put specific step-by-step details in subtasks, not the description.
+- Assign priority 1 (most urgent) to 5 (least urgent).
+- suggested_due_offset_days must be 0 or a positive integer.
+- If a timeline is given, derive offsets from it (e.g. "by end of year" = 365 days).
+- If no timeline, use sensible relative ordering.
+- For each task, set "phase_category" to exactly one value from this fixed list:
+  planning, finance, legal, documents, career, startup, business,
+  home, education, family, health, travel, relocation, marriage,
+  loss, growth, vehicle, retirement, completion, caution
+- For each task, set "task_type" ONLY if it directly maps to one of these guide keys:
+  aadhaar_download, pan_download, bank_account_opening, epf_transfer, aadhaar_update,
+  voter_address_change, passport_renewal, dl_address_change, epf_withdrawal,
+  domicile_certificate, business_registration, business_name_registration,
+  submit_hr_docs, open_salary_account
+  Otherwise omit "task_type" entirely (do not set it to null or empty string).
+- Output ONLY valid JSON matching this exact structure:
+  {
+    "tasks": [
+      {
+        "title": string,
+        "description": string,
+        "priority": integer 1-5,
+        "suggested_due_offset_days": integer >= 0,
+        "phase_category": string (one from the fixed list above),
+        "task_type": string (optional — only if matches a known guide key above),
+        "subtasks": [
+          {
+            "title": string,
+            "priority": integer 1-5,
+            "suggested_due_offset_days": integer >= 0,
+            "task_type": string (optional — only if matches a known guide key above)
+          }
+        ]
+      }
+    ]
+  }
+- Do not include markdown, code fences, or any text outside the JSON.
+"""
 
 _WORKFLOW_SYSTEM_PROMPT = """\
 You are Pathfinder AI, a life-event workflow planner.
@@ -59,18 +107,28 @@ Your job is to generate a practical, ordered task workflow to help the user
 complete this life event.
 
 STRICT RULES:
-- Base EVERY task and subtask EXCLUSIVELY on the retrieved entries.
-- Do NOT invent documents, steps, deadlines, or requirements not present in
-  the entries.
-- Do NOT use outside knowledge, legal advice, or general assumptions.
-- If the retrieved entries do not contain enough information to generate a
-  meaningful workflow, respond ONLY with:
-  {"error": "Insufficient knowledge to generate workflow."}
+- Base EVERY task and subtask EXCLUSIVELY on the retrieved entries for factual details (forms, locations, specific laws).
+- Keep task descriptions to 1-2 sentences max. Put specific step-by-step details in subtasks, not the description.
+- LOGICAL DECOMPOSITION: You SHOULD break down high-level tasks into actionable sub-steps (e.g., "Apply for X" can naturally include "Gather required documents", "Fill application form", "Pay processing fee", "Submit and track status") provided these steps are logical extensions of the provided knowledge.
+- Do NOT invent external links, specific office addresses, or legal deadlines not present in the entries.
+- Do NOT use outside knowledge for legal advice or complex assumptions.
+- If the retrieved entries do not contain enough information to generate a meaningful workflow, respond ONLY with: {"error": "Insufficient knowledge to generate workflow."}
 - Assign priority 1 (most urgent) to 5 (least urgent).
 - suggested_due_offset_days must be 0 or a positive integer.
 - If a timeline is given, derive offsets logically from it.
-- If no timeline, use sensible relative ordering (earlier steps get lower
-  offsets than later steps).
+- If no timeline, use sensible relative ordering (earlier steps get lower offsets than later steps).
+- For each task, set "phase_category" to exactly one value from this fixed list:
+  planning, finance, legal, documents, career, startup, business,
+  home, education, family, health, travel, relocation, marriage,
+  loss, growth, vehicle, retirement, completion, caution
+  Use "caution" for tasks about avoiding mistakes, pitfalls, risks, or common errors.
+  Choose the category that best matches the task's purpose.
+- For each task, set "task_type" ONLY if it directly maps to one of these guide keys:
+  aadhaar_download, pan_download, bank_account_opening, epf_transfer, aadhaar_update,
+  voter_address_change, passport_renewal, dl_address_change, epf_withdrawal,
+  domicile_certificate, business_registration, business_name_registration,
+  submit_hr_docs, open_salary_account
+  Otherwise omit "task_type" entirely (do not set it to null or empty string).
 - Output ONLY valid JSON matching this exact structure:
   {
     "tasks": [
@@ -79,11 +137,14 @@ STRICT RULES:
         "description": string,
         "priority": integer 1-5,
         "suggested_due_offset_days": integer >= 0,
+        "phase_category": string (one from the fixed list above),
+        "task_type": string (optional — only if matches a known guide key above),
         "subtasks": [
           {
             "title": string,
             "priority": integer 1-5,
-            "suggested_due_offset_days": integer >= 0
+            "suggested_due_offset_days": integer >= 0,
+            "task_type": string (optional — only if matches a known guide key above)
           }
         ]
       }
@@ -224,25 +285,30 @@ def _generate_workflow(prompt: str) -> dict:
     except Exception as exc:
         logger.warning("OpenRouter workflow generation failed: %s", str(exc)[:120])
 
-    # ── SECONDARY: Direct Gemini with strict JSON mode ─────────────────────
+    # ── SECONDARY: Direct Gemini with strict JSON mode — try multiple models ─
     client = _get_client()
-    try:
-        response = client.models.generate_content(
-            model=_GENERATION_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_WORKFLOW_SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                temperature=0.2,
-                max_output_tokens=4096,
-            ),
-        )
-        return json.loads(response.text.strip())
-    except Exception as exc:
-        err_str = str(exc)
-        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-            raise RuntimeError("All models rate limited. Try again in ~60s.") from exc
-        raise RuntimeError(f"Workflow LLM call failed: {exc}") from exc
+    for gemini_model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+        try:
+            response = client.models.generate_content(
+                model=gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=_WORKFLOW_SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    temperature=0.2,
+                    max_output_tokens=4096,
+                ),
+            )
+            if response.text and response.text.strip():
+                logger.info("Direct Gemini workflow SUCCESS: %s", gemini_model)
+                return json.loads(response.text.strip())
+        except Exception as exc:
+            err_str = str(exc)
+            logger.warning("Direct Gemini %s workflow failed: %s", gemini_model, str(exc)[:100])
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                continue  # try next model
+            continue
+    raise RuntimeError("All models rate limited or failed. Try again in ~60s.")
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +348,7 @@ def _parse_tasks(data: dict) -> tuple[list[ProposedTask], Optional[str]]:
                     title=sub_title,
                     priority=max(1, min(5, int(s.get("priority", 3)))),
                     suggested_due_offset_days=max(0, int(s.get("suggested_due_offset_days", 0))),
+                    task_type=s.get("task_type") or None,
                 )
             )
 
@@ -293,11 +360,83 @@ def _parse_tasks(data: dict) -> tuple[list[ProposedTask], Optional[str]]:
                 suggested_due_offset_days=max(
                     0, int(raw_task.get("suggested_due_offset_days", 0))
                 ),
+                phase_category=raw_task.get("phase_category") or None,
+                task_type=raw_task.get("task_type") or None,
                 subtasks=subtasks,
             )
         )
 
     return tasks, None
+
+
+# ---------------------------------------------------------------------------
+# AI-first generation (no KB entries available)
+# ---------------------------------------------------------------------------
+
+def _generate_ai_first_workflow(
+    life_event_types: list[LifeEventType],
+    location: Optional[str],
+    timeline: Optional[str],
+    original_description: Optional[str],
+) -> list[ProposedTask]:
+    """
+    Generate a workflow using pure AI when no KB entries exist for the event type.
+    Uses the user's original description so the roadmap is actually relevant.
+    """
+    types_str = ", ".join(t.value.replace("_", " ") for t in life_event_types)
+    context_lines = [f"Life event(s): {types_str}"]
+    if original_description:
+        context_lines.append(f"User's goal: {original_description}")
+    if location:
+        context_lines.append(f"Location: {location}")
+    if timeline:
+        context_lines.append(f"Timeline: {timeline}")
+    context_lines.append("\nGenerate a comprehensive, step-by-step task workflow for this goal.")
+    prompt = "\n\n".join(context_lines)
+
+    # Try OpenRouter first
+    try:
+        from backend.services.openrouter_client import generate_completion
+        text = generate_completion(
+            system_instruction=_AI_FIRST_SYSTEM_PROMPT,
+            user_message=prompt,
+            max_tokens=4096,
+            temperature=0.3,
+        )
+        raw_data = _extract_json(text)
+        tasks, _ = _parse_tasks(raw_data)
+        if tasks:
+            logger.info("AI-first workflow generated via OpenRouter for: %s", types_str)
+            return tasks
+    except Exception as exc:
+        logger.warning("OpenRouter AI-first generation failed: %s", str(exc)[:120])
+
+    # Fall back to direct Gemini
+    client = _get_client()
+    for gemini_model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+        try:
+            response = client.models.generate_content(
+                model=gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=_AI_FIRST_SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                    max_output_tokens=4096,
+                ),
+            )
+            if response.text and response.text.strip():
+                raw_data = json.loads(response.text.strip())
+                tasks, _ = _parse_tasks(raw_data)
+                if tasks:
+                    logger.info("AI-first workflow generated via Gemini %s", gemini_model)
+                    return tasks
+        except Exception as exc:
+            logger.warning("Gemini %s AI-first failed: %s", gemini_model, str(exc)[:100])
+            continue
+
+    logger.error("All AI-first generation attempts failed for %s", types_str)
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -311,33 +450,29 @@ def propose_workflow(
     timeline: Optional[str],
     top_k: int = 5,
     start_date: Optional[str] = None,
+    original_description: Optional[str] = None,
 ) -> WorkflowProposalResponse:
     """
     Full Layer 3.3 pipeline: retrieve -> prompt -> generate -> validate.
+
+    When KB has no relevant entries, falls back to pure AI generation using
+    the original_description so the roadmap actually matches the user's goal.
     """
     chunks = []
     explanation = None
     tasks = []
-    
+
     try:
         # 1. Retrieve grounded knowledge
         chunks = _gather_chunks(db, life_event_types, top_k)
-        
-        # 2. Build grounded explanation — uses RAG + Expert Fallbacks
-        try:
-            from backend.services.rag_service import explain_with_llm
-            # Build query from first event type
-            query = f"requirements for {life_event_types[0].value.replace('_', ' ').lower()} in {location or 'India'}"
-            explanation_obj = explain_with_llm(query, chunks, life_event_types[0])
-            explanation = explanation_obj.explanation
-        except Exception as e:
-            logger.warning("Could not generate requirements explanation during proposal: %s", e)
-            explanation = None
 
         if not chunks:
-            # Generate generic fallback tasks if KB is empty
-            from backend.services.workflow_generation_service import _make_fallback_tasks
-            tasks = _make_fallback_tasks(life_event_types)
+            # No KB entries for this event type — use AI with the user's original description
+            logger.info(
+                "No KB chunks found for %s — switching to AI-first generation.",
+                [t.value for t in life_event_types],
+            )
+            tasks = _generate_ai_first_workflow(life_event_types, location, timeline, original_description)
         else:
             # 3. Build grounded prompt for tasks
             prompt = _build_prompt(life_event_types, location, timeline, chunks)
@@ -346,17 +481,16 @@ def propose_workflow(
                 raw_data = _generate_workflow(prompt)
                 tasks, error = _parse_tasks(raw_data)
                 if error or not tasks:
-                    from backend.services.workflow_generation_service import _make_fallback_tasks
-                    tasks = _make_fallback_tasks(life_event_types)
+                    # KB existed but LLM returned nothing useful — try AI-first
+                    logger.warning("Grounded generation returned no tasks (%s) — trying AI-first.", error)
+                    tasks = _generate_ai_first_workflow(life_event_types, location, timeline, original_description)
             except Exception as e:
-                logger.warning("Workflow generation failed: %s. Using fallback template.", e)
-                from backend.services.workflow_generation_service import _make_fallback_tasks
-                tasks = _make_fallback_tasks(life_event_types)
-                
+                logger.warning("Workflow generation failed: %s — trying AI-first.", e)
+                tasks = _generate_ai_first_workflow(life_event_types, location, timeline, original_description)
+
     except Exception as exc:
-        logger.warning("Workflow proposal pipeline fully failed: %s. Returning fallback.", exc)
-        from backend.services.workflow_generation_service import _make_fallback_tasks
-        tasks = _make_fallback_tasks(life_event_types)
+        logger.warning("Workflow proposal pipeline failed: %s — trying AI-first.", exc)
+        tasks = _generate_ai_first_workflow(life_event_types, location, timeline, original_description)
 
     # 5. Apply scheduling if start_date provided
     if start_date and tasks:

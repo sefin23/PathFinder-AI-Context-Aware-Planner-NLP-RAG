@@ -41,6 +41,7 @@ import DocumentStatusDashboard from '../components/DocumentStatusDashboard'
 import { usePersonalEvents } from '../hooks/usePersonalEvents'
 import CustomDarkCalendar from '../components/CustomDarkCalendar'
 import DatePill from '../components/DatePill'
+import PlanChat from '../components/PlanChat'
 import confetti from 'canvas-confetti'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -236,8 +237,8 @@ function getEventIcon(title = '', displayTitle = '') {
   return { image, color }
 }
 
-const getPhaseEmoji = (phaseName = '') => {
-  return getEventVisuals(phaseName).emoji
+const getPhaseEmoji = (phaseName = '', category = null) => {
+  return getEventVisuals(phaseName, '', category).emoji
 }
 
 // ── Progress Ring ─────────────────────────────────────────────────────────
@@ -278,6 +279,13 @@ function PhaseStrip({ phases, tasks, selectedPhase, onSelectPhase, viewMode, the
     const doneCount = subs.filter(s => s.done).length
     return (doneCount / subs.length) * 100
   }
+
+  // Build phase_title → phase_category lookup for emoji resolution
+  const phaseCategoryMap = {}
+  tasks.forEach(t => {
+    if (t.phase_title && t.phase_category) phaseCategoryMap[t.phase_title] = t.phase_category
+    if (t.category && t.phase_category) phaseCategoryMap[t.category] = t.phase_category
+  })
 
   const phaseData = phases.map((phase, idx) => {
     const phaseTasks = tasks.filter(t => (viewMode === 'phase' ? t.category : (t.phase_title || 'General')) === phase)
@@ -389,7 +397,7 @@ function PhaseStrip({ phases, tasks, selectedPhase, onSelectPhase, viewMode, the
 
                     {/* Phase Title (No Truncation) */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, opacity: 1 }}>
-                      <span style={{ fontSize: 24, flexShrink: 0 }}>{getPhaseEmoji(phase)}</span>
+                      <span style={{ fontSize: 24, flexShrink: 0 }}>{getPhaseEmoji(phase, phaseCategoryMap[phase])}</span>
                       <span style={{ 
                         fontSize: 15, 
                         fontWeight: 800, 
@@ -525,6 +533,7 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
   const [vaultLoading, setVaultLoading] = useState(false)
   const [isInitialised, setIsInitialised] = useState(false)
   const [celebratedPhases, setCelebratedPhases] = useState(new Set())
+  const [chatOpen, setChatOpen] = useState(false)
   
   const groupedDocsData = useMemo(() => {
     if (!requirements) return null
@@ -652,9 +661,10 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
         // Match vault in background and update tasks with links when done
         matchVaultToPlan(planId)
           .then(matches => {
-            setVaultMatches(matches)
-            setTasks(prev => (data.tasks ?? []).map((t, idx) => normaliseTask(t, idx, matches)))
-            const matchedNames = new Set(matches.map(m => m.vault_doc?.name))
+            const matchList = matches?.matched ?? []
+            setVaultMatches(matchList)
+            setTasks(prev => (data.tasks ?? []).map((t, idx) => normaliseTask(t, idx, matchList)))
+            const matchedNames = new Set(matchList.map(m => m.vault_doc?.name))
             setCollectedDocs(matchedNames)
           })
           .catch(e => console.error("Vault match failed:", e))
@@ -1054,12 +1064,8 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
 
   const recommendedId = tasks.filter(t => !t.done).sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5))[0]?.id
 
-  const [showPlanner, setShowPlanner] = useState(false)
-  const [plannerMinimized, setPlannerMinimized] = useState(false)
-  const [hasSeenPlannerHint, setHasSeenPlannerHint] = useState(() => {
-    // Check localStorage for first-time user experience
-    return localStorage.getItem('pathfinder_seen_planner_hint') === 'true'
-  })
+  const [plannerModalOpen, setPlannerModalOpen] = useState(false)
+  const [editMode, setEditMode] = useState(false)
 
   // Calculate clash count for the widget
   const clashCount = useMemo(() => {
@@ -1081,13 +1087,6 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
     return Object.keys(tasksByDate).filter(date => personalByDate[date]?.length > 0).length
   }, [tasks, personalEvents])
 
-  // Mark hint as seen when planner is opened
-  useEffect(() => {
-    if (showPlanner && !hasSeenPlannerHint) {
-      localStorage.setItem('pathfinder_seen_planner_hint', 'true')
-      setHasSeenPlannerHint(true)
-    }
-  }, [showPlanner, hasSeenPlannerHint])
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -1151,8 +1150,17 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <h1 className="font-playfair" style={{ fontSize: 42, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.01em' }}>{planTitle}</h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <h1 className="font-playfair" style={{ fontSize: 42, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.01em' }}>{journey?.display_title || journey?.title || planTitle}</h1>
+                  <span style={{ fontSize: 10, background: 'var(--amber)', color: 'black', padding: '2px 8px', borderRadius: '4px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>SAVED</span>
+                </div>
+                
+                {(journey?.description || planDescription) && (
+                  <p style={{ fontSize: 15, color: 'var(--fog)', lineHeight: 1.5, maxWidth: 600, margin: '8px 0 0 0' }}>
+                    {journey?.description || planDescription}
+                  </p>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, position: 'relative' }}>
                   <button 
                     onClick={() => setShowCalendar(!showCalendar)}
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.6 }}
@@ -1402,6 +1410,26 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
               >
                 {hideCompleted ? <EyeOff size={16} /> : <Eye size={16} />} {hideCompleted ? 'Show all' : 'Hide done'}
               </button>
+              <button
+                onClick={() => setEditMode(m => !m)}
+                style={{
+                  padding: '10px 18px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  borderRadius: 10,
+                  background: editMode ? 'rgba(212,124,63,0.15)' : 'rgba(255,255,255,0.04)',
+                  color: editMode ? 'var(--amber)' : 'rgba(255,255,255,0.6)',
+                  border: `1px solid ${editMode ? 'rgba(212,124,63,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <ArrowRight size={16} style={{ transform: editMode ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                {editMode ? 'Done Editing' : 'Edit'}
+              </button>
             </div>
           </div>
 
@@ -1437,7 +1465,8 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                     const doneCount = group.tasks.filter(t => t.done).length
                     const isAllDone = group.tasks.length > 0 && doneCount === group.tasks.length
                     const pct = Math.round((doneCount / group.tasks.length) * 100)
-                    const emoji = getPhaseEmoji(group.phase) || getPhaseEmoji(inferCategory('', group.phase)) || '📍'
+                    const groupCategory = group.tasks.find(t => t.phase_category)?.phase_category ?? null
+                    const emoji = getPhaseEmoji(group.phase, groupCategory) || '📍'
 
                     return (
                       <div key={group.phase} style={{ marginBottom: 32 }}>
@@ -1463,28 +1492,64 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                             <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase' }}>{doneCount}/{group.tasks.length} TASKS</span>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                          {group.tasks.map((task, idx) => {
-                            const blockerTask = task.parent_id ? tasks.find(t => t.id === task.parent_id) : null
-                            const blockedBy = blockerTask && !blockerTask.done ? blockerTask.title : null
-
-                            return (
+                        {editMode ? (
+                          <Reorder.Group
+                            axis="y"
+                            values={group.tasks}
+                            onReorder={newOrder => {
+                              setTasks(prev => {
+                                const phaseIds = new Set(newOrder.map(t => String(t.id)))
+                                const otherTasks = prev.filter(t => !phaseIds.has(String(t.id)))
+                                return [...otherTasks, ...newOrder]
+                              })
+                            }}
+                            style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}
+                          >
+                            {group.tasks.map(task => (
+                              <Reorder.Item key={task.id} value={task} id={`task-${task.id}`} style={{ listStyle: 'none' }}>
+                                <JourneyTaskCard
+                                  task={task}
+                                  editMode={true}
+                                  onToggleDone={toggleTask}
+                                  onOpenGuide={t => setGuideTask(t)}
+                                  onNavigate={onNavigate}
+                                  onEditDays={editTaskDays}
+                                  onEditPriority={editTaskPriority}
+                                  onEditScheduledDate={handleScheduledDateChange}
+                                  onDeleteTask={deleteTask}
+                                  onToggleSubtask={toggleSubtask}
+                                  onAddSubtask={addSubtask}
+                                  onDeleteSubtask={deleteSubtask}
+                                  onOpenPlanner={() => setPlannerModalOpen(true)}
+                                  startDate={journey?.start_date}
+                                />
+                              </Reorder.Item>
+                            ))}
+                          </Reorder.Group>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {group.tasks.map(task => (
                               <div id={`task-${task.id}`} key={task.id}>
-                                  <JourneyTaskCard
-                                    task={task} 
-                                    index={idx}
-                                    onToggleDone={toggleTask}
-                                    onOpenGuide={t => setGuideTask(t)}
-                                    onNavigate={onNavigate}
-                                    onEditDays={editTaskDays}
-                                    onEditScheduledDate={handleScheduledDateChange}
-                                    onDeleteTask={deleteTask}
-                                    startDate={journey?.start_date}
-                                  />
+                                <JourneyTaskCard
+                                  task={task}
+                                  editMode={false}
+                                  onToggleDone={toggleTask}
+                                  onOpenGuide={t => setGuideTask(t)}
+                                  onNavigate={onNavigate}
+                                  onEditDays={editTaskDays}
+                                  onEditPriority={editTaskPriority}
+                                  onEditScheduledDate={handleScheduledDateChange}
+                                  onDeleteTask={deleteTask}
+                                  onToggleSubtask={toggleSubtask}
+                                  onAddSubtask={addSubtask}
+                                  onDeleteSubtask={deleteSubtask}
+                                  onOpenPlanner={() => setPlannerModalOpen(true)}
+                                  startDate={journey?.start_date}
+                                />
                               </div>
-                            )
-                          })}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -1494,270 +1559,174 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
           )}
         </div>
 
-      {/* DOCKED SCHEDULER SIDEBAR (Always visible, right side) */}
-      {!plannerMinimized && (
-        <motion.div
-          initial={{ x: 60, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.3, type: 'spring', damping: 25 }}
-          style={{
-            position: 'fixed',
-            right: 20,
-            top: showPlanner ? '60px' : '50%',
-            bottom: showPlanner ? '60px' : 'auto',
-            transform: showPlanner ? 'none' : 'translateY(-50%)',
-            width: showPlanner ? '400px' : '64px',
-            overflowY: showPlanner ? 'auto' : 'hidden',
-            background: 'var(--forest-card)',
-            borderRadius: 20,
-            border: `1px solid ${clashCount > 0 ? 'rgba(198,93,74,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-            zIndex: 50,
-            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            backdropFilter: 'blur(10px)'
-          }}
-          className="schedule-sidebar custom-scrollbar"
-        >
-          <AnimatePresence>
-            {conflictModal && (
-              <ConflictResolutionModal
-                task={conflictModal.task}
-                conflictingTasks={conflictModal.conflictingTasks}
-                proposedDate={conflictModal.proposedDate}
-                onResolve={handleResolveConflict}
-                onClose={() => setConflictModal(null)}
-              />
-            )}
-          </AnimatePresence>
+      {/* ── Conflicts badge + DayPlanner modal ─────────────────────── */}
+      <AnimatePresence>
+        {conflictModal && (
+          <ConflictResolutionModal
+            task={conflictModal.task}
+            conflictingTasks={conflictModal.conflictingTasks}
+            proposedDate={conflictModal.proposedDate}
+            onResolve={handleResolveConflict}
+            onClose={() => setConflictModal(null)}
+          />
+        )}
+      </AnimatePresence>
 
-          {/* Collapsed State: Vertical Tab */}
-          {!showPlanner && (
-            <motion.button
-              onClick={() => {
-                setShowPlanner(true)
-                if (!hasSeenPlannerHint) {
-                  localStorage.setItem('pathfinder_seen_planner_hint', 'true')
-                  setHasSeenPlannerHint(true)
-                }
-              }}
-              whileHover={{ scale: 1.02 }}
-              animate={!hasSeenPlannerHint ? {
-                boxShadow: ['0 0 0 0 rgba(212,124,63,0.5)', '0 0 0 12px rgba(212,124,63,0)', '0 0 0 0 rgba(212,124,63,0)']
-              } : {}}
-              transition={!hasSeenPlannerHint ? { duration: 2, repeat: Infinity, repeatDelay: 1.5 } : {}}
+      {/* ── Ask Your Plan — floating speech bubble button ─────────────────── */}
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.6, type: 'spring', damping: 18, stiffness: 260 }}
+        whileHover={{ scale: 1.08, y: -2 }}
+        whileTap={{ scale: 0.94 }}
+        onClick={() => setChatOpen(true)}
+        title="Ask Your Plan"
+        style={{
+          position: 'fixed',
+          right: 32,
+          bottom: 40,
+          background: 'rgba(32,56,42,0.98)',
+          border: '1px solid rgba(92,140,117,0.5)',
+          borderRadius: 50,
+          cursor: 'pointer',
+          zIndex: 50,
+          padding: '16px 32px 16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          backdropFilter: 'blur(16px)',
+          boxShadow: '0 12px 48px rgba(0,0,0,0.6), 0 0 20px rgba(92,140,117,0.15)',
+        }}
+      >
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="none">
+          <path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z" fill="#5c8c75" />
+          <circle cx="9" cy="12" r="1.2" fill="white" />
+          <circle cx="12" cy="12" r="1.2" fill="white" />
+          <circle cx="15" cy="12" r="1.2" fill="white" />
+        </svg>
+        <span style={{
+          fontSize: 17,
+          fontFamily: "'DM Sans', sans-serif",
+          fontWeight: 800,
+          color: 'rgba(255,255,255,1)',
+          letterSpacing: '0.01em',
+        }}>Ask me</span>
+      </motion.button>
+
+      {/* ── Ask Your Plan — slide-in chat panel ───────────────────────────── */}
+      <AnimatePresence>
+        {chatOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setChatOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 200,
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+              padding: '24px',
+            }}
+          >
+            <motion.div
+              initial={{ x: 60, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 60, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25 }}
+              onClick={e => e.stopPropagation()}
               style={{
-                width: '100%',
-                height: '100%',
-                minHeight: 220,
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '28px 0',
+                width: 460,
+                height: '80vh',
+                background: 'var(--forest-card)',
+                borderRadius: 20,
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                position: 'relative'
+                overflow: 'hidden',
               }}
             >
-              {/* Minimize button at top */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setPlannerMinimized(true)
-                }}
-                style={{
-                  position: 'absolute',
-                  top: 8,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 6,
-                  width: 24,
-                  height: 24,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  padding: 0
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                  e.currentTarget.style.color = 'white'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                  e.currentTarget.style.color = 'var(--muted)'
-                }}
-              >
-                <ChevronsRight size={12} />
-              </button>
-
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, flex: 1, justifyContent: 'center' }}>
-                {/* Clash Badge */}
-                {clashCount > 0 && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    style={{
-                      position: 'absolute',
-                      top: 42,
-                      right: 10,
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      background: 'var(--coral)',
-                      border: '2px solid var(--forest-deep)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 9,
-                      fontWeight: 900,
-                      color: 'white',
-                      boxShadow: '0 0 12px rgba(198,93,74,0.6)'
-                    }}
-                  >
-                    {clashCount}
-                  </motion.div>
-                )}
-
-                {/* Icon */}
-                <div style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  background: clashCount > 0 ? 'rgba(198,93,74,0.1)' : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${clashCount > 0 ? 'rgba(198,93,74,0.2)' : 'rgba(255,255,255,0.1)'}`,
-                }}>
-                  <Calendar size={18} color={clashCount > 0 ? 'var(--coral)' : 'var(--amber)'} />
+              {/* Panel header */}
+              <div style={{ padding: '16px 18px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="none">
+                    <path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z" fill="#5c8c75" />
+                    <circle cx="9" cy="12" r="1.2" fill="white" />
+                    <circle cx="12" cy="12" r="1.2" fill="white" />
+                    <circle cx="15" cy="12" r="1.2" fill="white" />
+                  </svg>
+                  <div>
+                    <h3 className="font-playfair" style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0 }}>Ask Your Plan</h3>
+                    <p style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 600, margin: '2px 0 0 0', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.05em' }}>Navigator · Knows your full plan</p>
+                  </div>
                 </div>
-
-                {/* Vertical Text - Highly visible white */}
-                <div style={{
-                  writingMode: 'vertical-rl',
-                  textOrientation: 'mixed',
-                  fontSize: 11,
-                  fontWeight: 900,
-                  letterSpacing: '0.2em',
-                  color: clashCount > 0 ? 'var(--coral)' : '#ffffff',
-                  textTransform: 'uppercase',
-                  fontFamily: "'DM Sans', sans-serif",
-                  opacity: 1
-                }}>
-                  SCHEDULE
-                </div>
-
-                {/* Status Indicator */}
-                {clashCount > 0 && (
-                  <motion.div
-                    animate={{ opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: 'var(--coral)',
-                      boxShadow: '0 0 8px var(--coral)'
-                    }}
-                  />
-                )}
+                <button
+                  onClick={() => setChatOpen(false)}
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', cursor: 'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--muted)' }}
+                >
+                  <ChevronsRight size={14} />
+                </button>
               </div>
-            </motion.button>
-          )}
+              {/* Chat body — fills remaining height */}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <PlanChat lifeEventId={planId} planTitle={planTitle} embedded />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {/* Expanded State: Full Panel */}
-          {showPlanner && (
-            <div style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                padding: '24px 20px 16px',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderBottom: '1px solid rgba(255,255,255,0.06)'
-              }}>
+      <AnimatePresence>
+        {plannerModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setPlannerModalOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 200,
+              background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              padding: '24px',
+            }}
+          >
+            <motion.div
+              initial={{ x: 60, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 60, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: 420, maxHeight: '85vh', overflowY: 'auto',
+                background: 'var(--forest-card)',
+                borderRadius: 20,
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+              }}
+              className="custom-scrollbar"
+            >
+              <div style={{ padding: '20px 20px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ padding: 8, borderRadius: 8, background: 'rgba(212,124,63,0.15)', border: '1px solid rgba(212,124,63,0.25)' }}>
-                    <Clock size={16} color="#d47c3f" />
+                    <Clock size={16} color="var(--amber)" />
                   </div>
                   <div>
                     <h3 className="font-playfair" style={{ fontSize: 16, fontWeight: 800, color: 'white', margin: 0 }}>Daily Planner</h3>
-                    <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, fontWeight: 600 }}>Reality check your schedule</p>
+                    <p style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 600, margin: '2px 0 0 0' }}>Reality check your schedule</p>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => setPlannerMinimized(true)}
-                    title="Minimize to pill"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      width: 28,
-                      height: 28,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--muted)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                      e.currentTarget.style.color = 'white'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                      e.currentTarget.style.color = 'var(--muted)'
-                    }}
-                  >
-                    <ChevronsRight size={13} />
-                  </button>
-                  <button
-                    onClick={() => setShowPlanner(false)}
-                    title="Collapse to tab"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      width: 28,
-                      height: 28,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--muted)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                      e.currentTarget.style.color = 'white'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                      e.currentTarget.style.color = 'var(--muted)'
-                    }}
-                  >
-                    <EyeOff size={13} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setPlannerModalOpen(false)}
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', cursor: 'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'white' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--muted)' }}
+                >
+                  <ChevronsRight size={14} />
+                </button>
               </div>
-
-              <div style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '20px',
-                minHeight: 0
-              }}>
+              <div style={{ padding: '20px' }}>
                 <DayPlannerPanel
                   tasks={tasks}
                   personalEvents={personalEvents}
@@ -1765,59 +1734,10 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                   onRemoveEvent={removePersonalEvent}
                 />
               </div>
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {/* MINIMIZED PILL STATE */}
-      {plannerMinimized && (
-        <motion.button
-          initial={{ scale: 0, x: 40 }}
-          animate={{ scale: 1, x: 0 }}
-          exit={{ scale: 0, x: 40 }}
-          whileHover={{ scale: 1.05 }}
-          onClick={() => setPlannerMinimized(false)}
-          style={{
-            position: 'fixed',
-            right: 20,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            padding: '12px 14px',
-            background: clashCount > 0 ? 'rgba(198,93,74,0.2)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${clashCount > 0 ? 'rgba(198,93,74,0.3)' : 'rgba(255,255,255,0.1)'}`,
-            borderRadius: 999,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-            zIndex: 50,
-            backdropFilter: 'blur(10px)',
-            transition: 'all 0.3s'
-          }}
-        >
-          <Calendar size={15} color={clashCount > 0 ? 'var(--coral)' : 'var(--amber)'} />
-          {clashCount > 0 && (
-            <div style={{
-              minWidth: 18,
-              height: 18,
-              padding: '0 4px',
-              borderRadius: 10,
-              background: 'var(--coral)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 9,
-              fontWeight: 900,
-              color: 'white',
-              boxShadow: '0 0 8px rgba(198,93,74,0.5)'
-            }}>
-              {clashCount}
-            </div>
-          )}
-        </motion.button>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
@@ -1846,6 +1766,7 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
           if (guideTask?.id) toggleTask(guideTask.id)
           setGuideTask(null)
         }}
+        onToggleSubtask={toggleSubtask}
         onNavigate={onNavigate}
       />
     </motion.div>

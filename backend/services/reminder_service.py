@@ -1,223 +1,188 @@
-"""
-Reminder Service — core business logic for daily task reminders.
-
-Responsibilities:
-  1. For every active user, find tasks that need a reminder today.
-  2. Classify each task as UPCOMING (due ≤ 24 h) or OVERDUE.
-  3. Skip tasks where reminder_opt_out is True.
-  4. Skip tasks already logged in ReminderLog for today (dedup).
-  5. Batch all qualifying tasks into one digest per user.
-  6. Delegate sending to email_service.
-  7. Write a ReminderLog entry for every successfully sent item.
-
-Design constraints:
-  - Pure functions accept a db Session and a "now" datetime so they are
-    trivially unit-testable without touching the real clock or DB.
-  - No APScheduler references here — the scheduler calls run_daily_reminders().
-"""
 import logging
+import pytz
 from datetime import datetime, timezone, timedelta
-
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 
 from backend.database import SessionLocal
-from backend.models.reminder_log_model import ReminderLog, ReminderType
-from backend.models.task_model import Task, TaskStatus
 from backend.models.user_model import User
-from backend.services.email_service import DigestPayload, ReminderItem, send_reminder_digest
-from backend.utils.timezone_utils import days_until_due, now_in_tz, utc_to_user_local
+from backend.models.task_model import Task, TaskStatus
+from backend.models.life_event_model import LifeEvent, LifeEventStatus
+from backend.models.email_log_model import EmailLog
+from backend.services.email_service import send_morning_brief, send_nudge
 
 log = logging.getLogger(__name__)
 
-# A task is "upcoming" if it is due within this many hours from now.
-UPCOMING_WINDOW_HOURS = 24
-
-
 # ---------------------------------------------------------------------------
-# Deduplication helpers
+# Core Logic — Morning Brief (Type 1)
 # ---------------------------------------------------------------------------
-def _already_sent_today(
-    db: Session,
-    task_id: int,
-    user_id: int,
-    reminder_type: ReminderType,
-    user_tz: str,
-) -> bool:
+
+def run_utc_morning_brief_check():
     """
-    Return True if a reminder of this type was already logged for this
-    task today (in the user's local calendar day).
+    Main job function invoked by APScheduler.
+    Check all users and send morning briefs if it is ~7:30 AM in their local tz.
     """
-    local_today = now_in_tz(user_tz).date()
-    existing = (
-        db.query(ReminderLog)
-        .filter(
-            ReminderLog.task_id == task_id,
-            ReminderLog.user_id == user_id,
-            ReminderLog.reminder_type == reminder_type,
-        )
-        .all()
-    )
-    for log_entry in existing:
-        sent_local = utc_to_user_local(log_entry.sent_at, user_tz)
-        if sent_local.date() == local_today:
-            return True
-    return False
+    db: Session = SessionLocal()
+    now_utc = datetime.now(timezone.utc)
+    log.info("Morning Brief check started at %s UTC", now_utc.isoformat())
 
+    try:
+        # 1. Broadly fetch users who have notifications enabled
+        users = db.query(User).filter(User.email_notifications == True).all()
+        
+        for user in users:
+            try:
+                # 2. Check if it's 7:30 AM local
+                user_tz = pytz.timezone(user.timezone or "Asia/Kolkata")
+                user_local = now_utc.astimezone(user_tz)
+                
+                # Check if it's 7:30 AM (allow small buffer of ±15 mins from scheduler trigger frequency)
+                # Scheduler runs every 30 mins, so checking if hour=7 and minute >= 30 works.
+                if user_local.hour != 7 or user_local.minute < 30:
+                    continue
 
-def _log_reminder(
-    db: Session,
-    task_id: int,
-    user_id: int,
-    reminder_type: ReminderType,
-) -> None:
-    """Insert a ReminderLog entry to mark this reminder as sent."""
-    entry = ReminderLog(
-        task_id=task_id,
-        user_id=user_id,
-        reminder_type=reminder_type,
-    )
-    db.add(entry)
+                # 3. Check if we already sent a brief for this calendar day
+                if user.last_brief_sent_at:
+                    last_sent_local = user.last_brief_sent_at.astimezone(user_tz)
+                    if last_sent_local.date() == user_local.date():
+                        log.debug("Brief already sent today for user_id=%d", user.id)
+                        continue
 
+                # 4. Prepare data for the brief
+                _process_user_brief(db, user, now_utc)
 
-# ---------------------------------------------------------------------------
-# Task classification
-# ---------------------------------------------------------------------------
-def _classify_task(
-    task: Task,
-    user_tz: str,
-    now_utc: datetime,
-) -> ReminderType | None:
-    """
-    Decide whether a task deserves a reminder and which type.
+            except Exception:
+                log.exception("Error processing morning brief for user_id=%d", user.id)
 
-    Returns None if the task should be skipped.
-    """
-    if task.reminder_opt_out:
-        return None
-    if task.status in (TaskStatus.completed, TaskStatus.skipped):
-        return None
-    if task.due_date is None:
-        return None
+    finally:
+        db.close()
 
-    delta = days_until_due(task.due_date, user_tz)
+def _process_user_brief(db: Session, user: User, now_utc: datetime):
+    """Fetch user's journey data and send the brief if applicable."""
+    
+    # Get active life events (plans)
+    active_plans = db.query(LifeEvent).filter(
+        LifeEvent.user_id == user.id,
+        LifeEvent.status == LifeEventStatus.active
+    ).all()
 
-    # Compute exact hours remaining for precise same-day classification.
-    due_aware = task.due_date if task.due_date.tzinfo else task.due_date.replace(tzinfo=timezone.utc)
-    hours_until = (due_aware - now_utc).total_seconds() / 3600
+    if not active_plans:
+        return
 
-    # Past due (multi-day overdue caught by delta, same-day caught by hours_until)
-    if delta < 0 or hours_until < 0:
-        return ReminderType.OVERDUE
+    # Use the primary active plan (most recent one)
+    plan = active_plans[0]
+    
+    # Day number calculation — strip tzinfo from both sides; DB dates are tz-naive
+    start_date = plan.start_date or plan.created_at
+    day_number = (now_utc.replace(tzinfo=None) - start_date.replace(tzinfo=None)).days + 1
 
-    # Due within the next 24 hours
-    if hours_until <= UPCOMING_WINDOW_HOURS:
-        return ReminderType.UPCOMING
+    # Fetch all tasks to compute stats and lists
+    tasks = db.query(Task).filter(Task.life_event_id == plan.id).all()
+    
+    if not tasks:
+        return
 
-    return None
+    tasks_done = sum(1 for t in tasks if t.status == TaskStatus.completed)
+    total_tasks = len(tasks)
+    progress_percent = int((tasks_done / total_tasks) * 100) if total_tasks > 0 else 0
 
+    if total_tasks > 0 and tasks_done == total_tasks:
+        return # Don't send if all tasks done
 
-# ---------------------------------------------------------------------------
-# Per-user digest builder
-# ---------------------------------------------------------------------------
-def _build_user_digest(
-    db: Session,
-    user: User,
-    now_utc: datetime,
-) -> DigestPayload:
-    """
-    Collect all reminder-eligible tasks for one user into a DigestPayload.
-    Performs deduplication and logs each item that will be sent.
-    """
-    payload = DigestPayload(
+    # Finding Today's Focus (highest priority pending task)
+    pending_tasks = [t for t in tasks if t.status in (TaskStatus.pending, TaskStatus.in_progress)]
+    if not pending_tasks:
+        return
+
+    # due_date from DB is tz-naive; use tz-naive datetime.max as fallback to avoid TypeError
+    focus_task = sorted(pending_tasks, key=lambda x: (-x.priority, x.due_date if x.due_date else datetime.max))[0]
+    
+    # Finding Upcoming tasks (next 7 days)
+    seven_days_from_now = now_utc + timedelta(days=7)
+    upcoming_tasks = [
+        {"title": t.title, "due_date": t.due_date.strftime("%b %d") if t.due_date else "ASAP"}
+        for t in pending_tasks 
+        if t.due_date and now_utc < t.due_date.replace(tzinfo=timezone.utc) <= seven_days_from_now
+    ]
+
+    # Finding Overdue / Drifted tasks
+    overdue_list = [
+        {"title": t.title, "days_overdue": (now_utc - t.due_date.replace(tzinfo=timezone.utc)).days}
+        for t in pending_tasks 
+        if t.due_date and t.due_date.replace(tzinfo=timezone.utc) < now_utc
+    ]
+
+    # Send it!
+    success = send_morning_brief(
         user_id=user.id,
         user_email=user.email,
         user_name=user.name,
-        user_timezone=user.timezone,
+        plan_title=plan.title,
+        day_number=day_number,
+        focus_task={"title": focus_task.title, "description": focus_task.description or "Navigator's recommendation."},
+        upcoming_tasks=upcoming_tasks,
+        progress_percent=progress_percent,
+        tasks_done=tasks_done,
+        overdue_tasks=overdue_list,
+        phase_warning=None, # Future: phase-specific logic
+        plan_url="http://localhost:5173/#saved"
     )
 
-    # All active tasks belonging to this user (across all life events)
-    tasks = (
-        db.query(Task)
-        .join(Task.life_event)
-        .filter(
-            Task.life_event.has(user_id=user.id),
-            Task.status.notin_([TaskStatus.completed, TaskStatus.skipped]),
-            Task.reminder_opt_out.is_(False),
-            Task.due_date.isnot(None),
-        )
-        .all()
-    )
-
-    for task in tasks:
-        reminder_type = _classify_task(task, user.timezone, now_utc)
-        if reminder_type is None:
-            continue
-
-        if _already_sent_today(db, task.id, user.id, reminder_type, user.timezone):
-            log.debug(
-                "Skip duplicate: task_id=%d user_id=%d type=%s",
-                task.id, user.id, reminder_type.value,
-            )
-            continue
-
-        due_local_str = utc_to_user_local(task.due_date, user.timezone).strftime(
-            "%Y-%m-%d %H:%M %Z"
-        )
-        payload.items.append(
-            ReminderItem(
-                task_id=task.id,
-                task_title=task.title,
-                reminder_type=reminder_type.value,
-                due_date_local=due_local_str,
-            )
-        )
-        _log_reminder(db, task.id, user.id, reminder_type)
-
-    return payload
-
+    if success:
+        user.last_brief_sent_at = now_utc
+        # Log it
+        log_entry = EmailLog(user_id=user.id, life_event_id=plan.id, email_type='morning_brief', subject=f"Day {day_number} Brief")
+        db.add(log_entry)
+        db.commit()
 
 # ---------------------------------------------------------------------------
-# Public entry point — called by the scheduler
+# Triggered Logic — Nudge (Type 2)
 # ---------------------------------------------------------------------------
-def run_daily_reminders() -> None:
-    """
-    Main job function invoked by APScheduler at 8 AM each user's local time.
 
-    Opens its own DB session (not request-scoped) so it can run safely in
-    a background thread.
-    """
-    log.info("Reminder job started at %s UTC", datetime.now(timezone.utc).isoformat())
+def run_nudge_check():
+    """Triggered on task inactivity (Type 2)."""
     db: Session = SessionLocal()
     now_utc = datetime.now(timezone.utc)
+    log.info("Nudge check started.")
 
     try:
-        users = db.query(User).all()
-        sent_count = 0
+        # Tasks untouched for 3+ days and due in next 7 days
+        three_days_ago = now_utc - timedelta(days=3)
+        seven_days_from_now = now_utc + timedelta(days=7)
+        
+        stale_tasks = db.query(Task).join(LifeEvent).join(User).filter(
+            Task.status.notin_([TaskStatus.completed, TaskStatus.skipped]),
+            Task.due_date.isnot(None),
+            Task.due_date.between(now_utc, seven_days_from_now),
+            Task.updated_at < three_days_ago,
+            # Limit the number of nudges sent per task/user per day via user/task tracking
+            or_(Task.nudge_sent_at == None, Task.nudge_sent_at < (now_utc - timedelta(days=1)))
+        ).all()
 
-        for user in users:
-            try:
-                payload = _build_user_digest(db, user, now_utc)
+        # Send max one nudge per user per day
+        users_nudged_today = set()
 
-                if not payload.items:
-                    log.debug("No reminders for user_id=%d", user.id)
-                    continue
+        for task in stale_tasks:
+            user = task.life_event.user
+            if user.id in users_nudged_today:
+                continue
 
-                success = send_reminder_digest(payload)
-                if success:
-                    db.commit()
-                    sent_count += len(payload.items)
-                    log.info(
-                        "Digest sent to user_id=%d (%d items)", user.id, len(payload.items)
-                    )
-                else:
-                    db.rollback()
-                    log.warning("Digest send failed for user_id=%d — rolled back", user.id)
+            success = send_nudge(
+                user_id=user.id,
+                user_email=user.email,
+                user_name=user.name,
+                task_title=task.title,
+                impact_consequence="delay your journey's next milestone",
+                plan_url="http://localhost:5173/#saved"
+            )
 
-            except Exception:
-                db.rollback()
-                log.exception("Unexpected error processing user_id=%d", user.id)
-
-        log.info("Reminder job finished. Total items sent: %d", sent_count)
+            if success:
+                task.nudge_sent_at = now_utc
+                users_nudged_today.add(user.id)
+                log_entry = EmailLog(user_id=user.id, life_event_id=task.life_event_id, email_type='nudge', subject=f"Nudge: {task.title}")
+                db.add(log_entry)
+        
+        db.commit()
 
     finally:
         db.close()

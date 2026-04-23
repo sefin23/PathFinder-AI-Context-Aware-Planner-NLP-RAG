@@ -3,10 +3,25 @@
  * Specification from user chat with Claude (March 2026)
  */
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { getLifeEvents } from '../api/backend'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function _deriveEventTitle(e) {
+  const raw = e.display_title || e.title || ''
+  const generic = ['new event', 'event', 'life event', 'personal event', 'untitled']
+  if (!generic.includes(raw.toLowerCase())) return raw
+  try {
+    const meta = JSON.parse(e.metadata_json || '{}')
+    if (meta.event_types?.length > 0) {
+      const label = meta.event_types[0].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
+      const loc = e.location && e.location.toLowerCase() !== 'null' ? e.location : null
+      return loc ? `${label} in ${loc}` : label
+    }
+  } catch { /* ignore */ }
+  return raw || 'Personal Planning Journey'
+}
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 const STATUS_FILTERS = [
@@ -30,7 +45,7 @@ const DOMAIN_CONFIG = {
   relocation:{ color: '#7ba091', bg: 'rgba(123,160,145,', emoji: '🚚', label: 'Relocation' },
   home:      { color: '#5c8c75', bg: 'rgba(92,140,117,',  emoji: '🏠', label: 'Home' },
   startup:   { color: '#f2c94c', bg: 'rgba(242,201,76,',  emoji: '🚀', label: 'Business' },
-  legal:     { color: '#d47c3f', bg: 'rgba(212,124,63,',  emoji: '⚖️', label: 'Legal' },
+  legal:     { color: '#5c8c9e', bg: 'rgba(92,140,158,',  emoji: '⚖️', label: 'Legal' },
   health:    { color: '#c65d4a', bg: 'rgba(198,93,74,',   emoji: '🏥', label: 'Health' },
   marriage:  { color: '#c65d4a', bg: 'rgba(198,93,74,',   emoji: '💍', label: 'Relationships' },
   finance:   { color: '#c9a84c', bg: 'rgba(201,168,76,',  emoji: '💰', label: 'Finance' },
@@ -55,9 +70,6 @@ export default function JourneysPage() {
   const [activeStatus, setActiveStatus] = useState('all')
   const [activeDomain, setActiveDomain] = useState('all')
 
-  // Expand state
-  const [expandedIds, setExpandedIds] = useState(new Set())
-
   // Fetch journeys
   useEffect(() => {
     async function fetchJourneys() {
@@ -71,7 +83,7 @@ export default function JourneysPage() {
 
           return {
             id: e.id,
-            title: e.display_title || e.title,
+            title: _deriveEventTitle(e),
             domain: detectDomain(e.title, e.display_title),
             status: e.status === 'completed' ? 'done' : e.status === 'active' ? 'active' : 'upcoming',
             start_date: start ? formatDate(start) : null,
@@ -221,14 +233,6 @@ export default function JourneysPage() {
       { key: 'upcoming', label: 'UPCOMING' },
     ].filter(s => filtered.some(j => j.status === s.key))
   }, [filtered])
-
-  // Toggle expand
-  function toggleExpand(id) {
-    const next = new Set(expandedIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setExpandedIds(next)
-  }
 
   // Highlight text
   function highlightText(text, query) {
@@ -631,7 +635,6 @@ export default function JourneysPage() {
                   const dm = DOMAIN_CONFIG[journey.domain] || DOMAIN_CONFIG.career
                   const isActive = journey.status === 'active'
                   const isDone = journey.status === 'done'
-                  const isExpanded = expandedIds.has(journey.id)
                   const isLastInSection = idx === sectionJourneys.length - 1
                   const statusBadgeLabel = journey.status === 'active' ? 'Active today' : isDone ? 'Completed' : 'Planned'
 
@@ -639,7 +642,6 @@ export default function JourneysPage() {
                     <div key={journey.id} style={{ display: 'flex', alignItems: 'stretch', marginBottom: 10 }}>
                       {/* LEFT: circle + vertical strip */}
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44, flexShrink: 0 }}>
-                        {/* Circle node */}
                         <div style={{
                           width: 36,
                           height: 36,
@@ -657,8 +659,6 @@ export default function JourneysPage() {
                         }}>
                           {dm.emoji}
                         </div>
-
-                        {/* Vertical strip */}
                         {!isLastInSection && (
                           <div style={{
                             width: 2,
@@ -671,65 +671,47 @@ export default function JourneysPage() {
                         )}
                       </div>
 
-                      {/* RIGHT: bento card */}
-                      <div
-                        onClick={() => !isDone && toggleExpand(journey.id)}
-                        style={{
-                          flex: 1,
-                          borderRadius: 10,
-                          border: `1px solid ${dm.bg}${isActive ? '0.25' : '0.14'})`,
-                          background: `${dm.bg}0.06)`,
-                          padding: '11px 13px',
-                          cursor: isDone ? 'default' : 'pointer',
-                          opacity: isDone ? 0.45 : 1,
-                          transition: 'border-color .2s'
-                        }}
-                      >
-                        {/* Start date */}
+                      {/* RIGHT: expanded card */}
+                      <div style={{
+                        flex: 1,
+                        borderRadius: 10,
+                        border: `1px solid ${dm.bg}${isActive ? '0.25' : '0.14'})`,
+                        borderLeft: `3px solid ${dm.color}`,
+                        background: `${dm.bg}0.06)`,
+                        padding: '12px 14px',
+                        opacity: isDone ? 0.45 : 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10
+                      }}>
+                        {/* Date range */}
                         <div style={{
                           fontFamily: "'JetBrains Mono', monospace",
                           fontSize: 9,
                           color: dm.color,
-                          marginBottom: 4,
                           display: 'flex',
                           alignItems: 'center',
                           gap: 5
                         }}>
-                          <span style={{ fontWeight: 600 }}>
-                            {journey.start_date || 'Not set'}
-                          </span>
+                          <span style={{ fontWeight: 600 }}>{journey.start_date || 'Not set'}</span>
                           {journey.end_date && (
-                            <>
-                              <span style={{ opacity: .45 }}>—</span>
-                              <span style={{ opacity: .45 }}>{journey.end_date}</span>
-                            </>
+                            <><span style={{ opacity: .45 }}>—</span><span style={{ opacity: .45 }}>{journey.end_date}</span></>
                           )}
                         </div>
 
-                        {/* Title row */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 1 }}>
-                          <span style={{
-                            fontFamily: "'Playfair Display', serif",
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: '#f7f4ee',
-                            lineHeight: 1.3,
-                            flex: 1
-                          }}>
-                            {highlightText(journey.title, searchQuery)}
-                          </span>
-                          {/* Chevron */}
-                          {!isDone && (
-                            <motion.span
-                              animate={{ rotate: isExpanded ? 180 : 0 }}
-                              transition={{ duration: 0.2 }}
-                              style={{ fontSize: 10, opacity: .3, flexShrink: 0, marginTop: 2 }}
-                            >▾</motion.span>
-                          )}
-                        </div>
+                        {/* Title */}
+                        <span style={{
+                          fontFamily: "'Playfair Display', serif",
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: '#f7f4ee',
+                          lineHeight: 1.3
+                        }}>
+                          {highlightText(journey.title, searchQuery)}
+                        </span>
 
                         {/* Badges */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{
                             fontFamily: "'JetBrains Mono', monospace",
                             fontSize: 8,
@@ -754,118 +736,89 @@ export default function JourneysPage() {
                           )}
                         </div>
 
-                        {/* Expanded content */}
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.25, ease: 'easeInOut' }}
-                              style={{ overflow: 'hidden' }}
-                            >
-                              <div style={{
-                                marginTop: 12,
-                                paddingTop: 0
-                              }}>
-                                {/* Description */}
-                                {journey.description && (
-                                  <p style={{
-                                    fontSize: 11,
-                                    color: 'rgba(184,207,199,.5)',
-                                    lineHeight: '1.5',
-                                    marginBottom: 12,
-                                    fontFamily: "'DM Sans', sans-serif",
-                                  }}>
-                                    {journey.description}
-                                  </p>
-                                )}
+                        {/* Description */}
+                        {journey.description && (
+                          <p style={{
+                            fontSize: 11,
+                            color: 'rgba(184,207,199,.5)',
+                            lineHeight: 1.5,
+                            margin: 0,
+                            fontFamily: "'DM Sans', sans-serif"
+                          }}>
+                            {journey.description}
+                          </p>
+                        )}
 
-                                {/* Progress text and bar */}
-                                {journey.tasks_total > 0 && (
-                                  <div style={{ marginBottom: 12 }}>
-                                    <div style={{ fontSize: 11, color: 'rgba(184,207,199,.5)', marginBottom: 6 }}>
-                                      {journey.tasks_total - journey.tasks_done} tasks remaining
-                                    </div>
-                                    <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,.08)', borderRadius: 2, overflow: 'hidden' }}>
-                                      <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${journey.progress_pct}%` }}
-                                        transition={{ duration: 0.6, ease: 'easeOut' }}
-                                        style={{ height: '100%', background: dm.color, borderRadius: 2 }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
+                        {/* Progress text + bar */}
+                        {journey.tasks_total > 0 && (
+                          <div>
+                            <div style={{ fontSize: 11, color: 'rgba(184,207,199,.5)', marginBottom: 6 }}>
+                              {journey.tasks_total - journey.tasks_done} tasks remaining.
+                            </div>
+                            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,.08)', borderRadius: 2, overflow: 'hidden' }}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${journey.progress_pct}%` }}
+                                transition={{ duration: 0.6, ease: 'easeOut' }}
+                                style={{ height: '100%', background: dm.color, borderRadius: 2 }}
+                              />
+                            </div>
+                          </div>
+                        )}
 
-                                {/* Info grid */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                                  {/* Tasks */}
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>TASKS</span>
-                                    <span style={{ fontSize: 12, color: '#f7f4ee', fontWeight: 600 }}>{journey.tasks_done}/{journey.tasks_total} done</span>
-                                  </div>
-
-                                  {/* Target date */}
-                                  {journey.end_date && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>TARGET DATE</span>
-                                      <span style={{ fontSize: 12, color: '#f7f4ee', fontWeight: 600 }}>{journey.end_date}</span>
-                                    </div>
-                                  )}
-
-                                  {/* Next task */}
-                                  {journey.next_task && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>NEXT TASK</span>
-                                      <span style={{ fontSize: 11, color: dm.color, fontWeight: 600, textAlign: 'right' }}>{journey.next_task}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Open journey button */}
-                                {!isDone && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      window.dispatchEvent(new CustomEvent('navigate-to-plan', {
-                                        detail: {
-                                          id: journey.id,
-                                          title: journey.title,
-                                          description: journey.description
-                                        }
-                                      }))
-                                    }}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      gap: 6,
-                                      width: '100%',
-                                      fontFamily: "'JetBrains Mono', monospace",
-                                      fontSize: 9,
-                                      fontWeight: 600,
-                                      color: dm.color,
-                                      background: 'rgba(255,255,255,.03)',
-                                      border: `1px solid ${dm.bg}0.2)`,
-                                      borderRadius: 8,
-                                      padding: '8px 12px',
-                                      cursor: 'pointer',
-                                      marginTop: 4,
-                                      letterSpacing: '0.08em',
-                                      textTransform: 'uppercase',
-                                      transition: 'all .2s'
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.background = `${dm.bg}0.12)`}
-                                    onMouseLeave={(e) => e.target.style.background = 'rgba(255,255,255,.03)'}
-                                  >
-                                    Open journey →
-                                  </button>
-                                )}
-                              </div>
-                            </motion.div>
+                        {/* Info rows */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                          {journey.tasks_total > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>TASKS</span>
+                              <span style={{ fontSize: 12, color: '#f7f4ee', fontWeight: 600 }}>{journey.tasks_done}/{journey.tasks_total} done</span>
+                            </div>
                           )}
-                        </AnimatePresence>
+                          {journey.end_date && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>TARGET DATE</span>
+                              <span style={{ fontSize: 12, color: '#f7f4ee', fontWeight: 600 }}>{journey.end_date}</span>
+                            </div>
+                          )}
+                          {journey.next_task && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: 'rgba(184,207,199,.4)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>NEXT TASK</span>
+                              <span style={{ fontSize: 11, color: dm.color, fontWeight: 600, textAlign: 'right' }}>{journey.next_task}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Open journey button */}
+                        {!isDone && (
+                          <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-plan', {
+                              detail: { id: journey.id, title: journey.title, description: journey.description }
+                            }))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6,
+                              width: '100%',
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 9,
+                              fontWeight: 600,
+                              color: dm.color,
+                              background: 'rgba(255,255,255,.03)',
+                              border: `1px solid ${dm.bg}0.2)`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              letterSpacing: '0.08em',
+                              textTransform: 'uppercase',
+                              transition: 'all .2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = `${dm.bg}0.12)`}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,.03)'}
+                          >
+                            Open journey →
+                          </button>
+                        )}
                       </div>
                     </div>
                   )

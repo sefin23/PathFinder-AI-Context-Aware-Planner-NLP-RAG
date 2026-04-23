@@ -69,12 +69,21 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
   }
 
   const handleClarificationComplete = (answers) => {
-    // Simply pass the raw answers back for the AI to synthesize organically
+    // Pair each answer with its question so the classifier has full context,
+    // not just bare values like "Grade 5. Yes." that it can't interpret.
+    const questions = analysisData?.questions || []
     const additionalDetails = Object.entries(answers)
-      .map(([_, val]) => val)
+      .map(([key, val]) => {
+        if (!val?.trim()) return null
+        const questionText = questions[parseInt(key)]?.question
+        return questionText ? `${questionText}: ${val}` : val
+      })
+      .filter(Boolean)
       .join('. ')
-    
-    const combinedText = additionalDetails ? `${text.trim()}. ${additionalDetails}` : text
+
+    const combinedText = additionalDetails
+      ? `${text.trim()}. Additional context — ${additionalDetails}`
+      : text.trim()
 
     setText(combinedText)
     setShowClarification(false)

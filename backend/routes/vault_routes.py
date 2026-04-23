@@ -1,9 +1,8 @@
+import logging
 import os
 import shutil
 import uuid
-import json
 from datetime import datetime, timezone
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -12,8 +11,8 @@ from sqlalchemy import or_
 from backend.database import get_db
 from backend.models.vault_model import VaultDocument, VaultPlanLink
 from backend.models.task_model import Task
-from backend.models.life_event_model import LifeEvent
-from backend.services.vision_service import analyze_document_vision
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -92,7 +91,7 @@ async def upload_document(
         process_vault_extraction(db, db_doc.id)
         db.refresh(db_doc) # Refresh to get doc_type/name updates from service
     except Exception as e:
-        print(f"Post-upload automation failed: {e}")
+        log.warning("Post-upload automation failed for doc_id=%d: %s", db_doc.id, e)
     
     return db_doc
 

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -6,6 +7,8 @@ from backend.schemas.task_schema import TaskResponse
 from backend.models.life_event_model import LifeEvent
 from backend.models.user_model import User
 from backend.database import SessionLocal
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -79,21 +82,28 @@ def get_life_event(life_event_id: int, db: Session = Depends(get_db)):
 
     # Inject urgency scores and required docs status
     from backend.models.task_guide_model import TaskGuide
-    
+
     # Pre-cache user's vault doc types for efficiency
     vault_doc_types = {d.doc_type for d in life_event.user.vault_documents if not d.deleted_at}
-    
+
     top_level_tasks = [t for t in life_event.tasks if t.parent_id is None]
-    
+
+    # Batch-load all guides needed by this event's tasks — avoids N+1 queries
+    task_types_needed = {t.task_type for t in top_level_tasks if t.task_type}
+    guides_by_type: dict = {}
+    if task_types_needed:
+        guides = db.query(TaskGuide).filter(TaskGuide.task_type.in_(task_types_needed)).all()
+        guides_by_type = {g.task_type: g for g in guides}
+
     formatted_tasks = []
     for task in top_level_tasks:
         delta = days_until_due(task.due_date, user_tz) if task.due_date else None
-        task.urgency_score = _compute_urgency_score(task, delta, db)
-        
+        task.urgency_score = _compute_urgency_score(task, delta)
+
         # Doc Enrichment
         task.required_docs = []
         if task.task_type:
-            guide = db.query(TaskGuide).filter(TaskGuide.task_type == task.task_type).first()
+            guide = guides_by_type.get(task.task_type)
             if guide and guide.required_doc_types:
                 try:
                     doc_types = json.loads(guide.required_doc_types)
@@ -102,13 +112,13 @@ def get_life_event(life_event_id: int, db: Session = Depends(get_db)):
                             "name": dt.replace('_', ' ').title(),
                             "has": dt in vault_doc_types
                         })
-                except:
-                    pass
+                except Exception:
+                    log.warning("Corrupt required_doc_types JSON for task_type=%s", task.task_type)
 
         # Also handle subtasks (optional but good for consistency)
         for sub in task.subtasks:
             s_delta = days_until_due(sub.due_date, user_tz) if sub.due_date else None
-            sub.urgency_score = _compute_urgency_score(sub, s_delta, db)
+            sub.urgency_score = _compute_urgency_score(sub, s_delta)
             sub.required_docs = [] # Simple for now
         
         # Convert to Pydantic after all scores are set

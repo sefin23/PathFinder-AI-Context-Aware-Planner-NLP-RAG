@@ -14,6 +14,8 @@
   --amber: #d47c3f;
   --amber-rgb: 212, 124, 63;
   --amber-light: #f0a96b;
+  --sky: #5c8c9e;
+  --sky-rgb: 92, 140, 158;
   --coral: #c65d4a;
   --lavender: #7b6fa0;
   --gold: #c9a84c;
@@ -46,6 +48,11 @@
   --dur-slow: 700ms;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px; /* offset for sticky headers */
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -58,6 +65,42 @@ body {
   font-family: 'DM Sans', sans-serif;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none; /* prevent bounce stutter at page edges */
+}
+
+/* Smooth transitions on all interactive elements */
+a, button, [role="button"], [tabindex] {
+  transition: opacity var(--dur-fast) var(--ease-main),
+              color var(--dur-fast) var(--ease-main),
+              background var(--dur-fast) var(--ease-main),
+              border-color var(--dur-fast) var(--ease-main),
+              box-shadow var(--dur-fast) var(--ease-main),
+              transform var(--dur-fast) var(--ease-main);
+}
+
+/* Accessible, on-brand focus ring */
+:focus-visible {
+  outline: 2px solid var(--emerald);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+
+/* GPU-accelerated hints for commonly animated layers */
+.sb-wrap,
+.phase-glass-card,
+[class*="modal"],
+[class*="dialog"],
+[class*="dropdown"],
+[class*="popover"],
+[class*="tooltip"] {
+  will-change: transform, opacity;
+}
+
+/* Smooth image rendering */
+img {
+  image-rendering: auto;
 }
 
 /* Custom scrollbar */

@@ -14,12 +14,20 @@ const STAGE_LABELS = {
   'loading-docs': { text: 'Searching for information...', icon: Loader2, color: 'var(--emerald)' },
   'docs-loaded':  { text: 'Requirements found · Preparing details', icon: CheckCircle2, color: 'var(--amber)' },
   generating:   { text: 'Creating your roadmap...', icon: Loader2, color: 'var(--amber)' },
-  complete:     { text: 'Roadmap created · Ready for review', icon: CheckCircle2, color: 'var(--sage)' },
+  complete:     { text: 'Roadmap created · Ready for review', icon: CheckCircle2, color: 'var(--amber)' },
+  approving:    { text: 'Securing your path...', icon: Loader2, color: 'var(--emerald)' },
+  approved:     { text: 'Roadmap secured · Adding to history', icon: CheckCircle2, color: 'var(--sage)' },
   error:        { text: 'Problem occurred · Analysis stopped', icon: AlertCircle, color: 'var(--coral)' },
 }
 
 export default function TopNavbar({ stage = 'idle', activePage = 'dashboard' }) {
-  const stageInfo = STAGE_LABELS[stage] ?? STAGE_LABELS.idle
+  // If we are NOT on the dashboard, we shouldn't show "Analysis Stopped" or "Analyzing..."
+  // as those processes are Dashboard-specific.
+  const effectiveStage = (activePage !== 'dashboard' && (stage === 'error' || stage.includes('ing') || stage === 'loading-docs')) 
+    ? 'idle' 
+    : stage
+
+  const stageInfo = STAGE_LABELS[effectiveStage] ?? STAGE_LABELS.idle
   const Icon = stageInfo.icon
 
   return (

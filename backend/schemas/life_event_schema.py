@@ -24,6 +24,7 @@ class LifeEventUpdate(BaseModel):
     timeline: Optional[str] = None
     metadata_json: Optional[str] = None
     start_date: Optional[datetime] = None
+    requirements_json: Optional[str] = None
 
 
 class LifeEventResponse(BaseModel):
@@ -35,6 +36,7 @@ class LifeEventResponse(BaseModel):
     location: Optional[str]
     timeline: Optional[str]
     metadata_json: Optional[str]
+    requirements_json: Optional[str] = None
     start_date: Optional[datetime]
     created_at: datetime
     updated_at: datetime

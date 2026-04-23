@@ -44,6 +44,7 @@ class ApprovedTask(BaseModel):
         description="Days from today (UTC) when this task should be completed.",
     )
     phase_title: Optional[str] = None
+    phase_category: Optional[str] = None
     scheduled_date: Optional[datetime] = None
     task_type: Optional[str] = None
     status: Optional[str] = "pending"

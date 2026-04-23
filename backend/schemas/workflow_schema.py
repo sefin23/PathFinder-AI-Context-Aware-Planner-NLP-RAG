@@ -56,6 +56,14 @@ class WorkflowProposalRequest(BaseModel):
         None,
         description="Optional start date (ISO) to calculate real dates for tasks."
     )
+    original_description: Optional[str] = Field(
+        None,
+        max_length=2000,
+        description=(
+            "The user's original free-text description of their goal or life event. "
+            "Used to generate an AI-powered roadmap when no KB entries exist for the detected event type."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +84,10 @@ class ProposedSubtask(BaseModel):
         ...,
         ge=0,
         description="Days from the start of the life event when this subtask should be done.",
+    )
+    task_type: Optional[str] = Field(
+        None,
+        description="Guide key if this subtask maps to a known step-by-step guide.",
     )
 
 
@@ -101,6 +113,14 @@ class ProposedTask(BaseModel):
         ...,
         ge=0,
         description="Days from the start of the life event when this task should be completed.",
+    )
+    phase_category: Optional[str] = Field(
+        None,
+        description="Fixed category tag for emoji/icon lookup (e.g. 'finance', 'legal', 'startup').",
+    )
+    task_type: Optional[str] = Field(
+        None,
+        description="Guide key if this task maps to a known step-by-step guide.",
     )
     subtasks: list[ProposedSubtask] = Field(
         default_factory=list,

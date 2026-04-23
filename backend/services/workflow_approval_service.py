@@ -67,6 +67,127 @@ def _life_event_exists(db: Session, life_event_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Guide type inference — matches task titles to step-by-step guides
+# ---------------------------------------------------------------------------
+
+# Curated phrase → guide key map. Checked before keyword scoring so that
+# natural-language AI-generated titles ("Renew your passport") reliably link
+# to the correct guide even when keyword overlap is low.
+_PHRASE_TO_TYPE: dict[str, str] = {
+    # Aadhaar
+    "download aadhaar": "aadhaar_download",
+    "get aadhaar": "aadhaar_download",
+    "aadhaar download": "aadhaar_download",
+    "update aadhaar": "aadhaar_update",
+    "aadhaar update": "aadhaar_update",
+    "aadhaar address": "aadhaar_update",
+    "change aadhaar": "aadhaar_update",
+    # PAN
+    "download pan": "pan_download",
+    "get pan": "pan_download",
+    "pan card": "pan_download",
+    "pan download": "pan_download",
+    # Bank account
+    "open bank account": "bank_account_opening",
+    "open a bank": "bank_account_opening",
+    "bank account opening": "bank_account_opening",
+    "open salary account": "open_salary_account",
+    "salary account": "open_salary_account",
+    # EPF / PF
+    "transfer epf": "epf_transfer",
+    "epf transfer": "epf_transfer",
+    "transfer pf": "epf_transfer",
+    "pf transfer": "epf_transfer",
+    "transfer provident fund": "epf_transfer",
+    "withdraw epf": "epf_withdrawal",
+    "epf withdrawal": "epf_withdrawal",
+    "withdraw pf": "epf_withdrawal",
+    "pf withdrawal": "epf_withdrawal",
+    "epf claim": "epf_withdrawal",
+    # Passport
+    "renew passport": "passport_renewal",
+    "passport renewal": "passport_renewal",
+    "apply for passport": "passport_renewal",
+    "passport application": "passport_renewal",
+    "get passport": "passport_renewal",
+    # Voter ID
+    "voter address": "voter_address_change",
+    "update voter": "voter_address_change",
+    "change voter": "voter_address_change",
+    "voter id address": "voter_address_change",
+    # Driving licence
+    "driving licence address": "dl_address_change",
+    "driving license address": "dl_address_change",
+    "dl address": "dl_address_change",
+    "update dl": "dl_address_change",
+    "update driving licence": "dl_address_change",
+    "update driving license": "dl_address_change",
+    # Domicile
+    "domicile certificate": "domicile_certificate",
+    "get domicile": "domicile_certificate",
+    "apply domicile": "domicile_certificate",
+    "apply for domicile": "domicile_certificate",
+    # Business
+    "register business": "business_registration",
+    "business registration": "business_registration",
+    "register company": "business_registration",
+    "register your business": "business_registration",
+    "business name registration": "business_name_registration",
+    "register business name": "business_name_registration",
+    # HR / Onboarding
+    "submit hr": "submit_hr_docs",
+    "hr documents": "submit_hr_docs",
+    "submit joining documents": "submit_hr_docs",
+    "onboarding documents": "submit_hr_docs",
+    "joining formalities": "submit_hr_docs",
+    "new job documents": "submit_hr_docs",
+}
+
+
+def _build_guide_map(db: Session) -> list[tuple[str, list[str]]]:
+    """Load all guide task_types from DB and derive keyword lists."""
+    from backend.models.task_guide_model import TaskGuide
+    rows = db.query(TaskGuide.task_type).all()
+    return [
+        (task_type, [k for k in task_type.split("_") if len(k) >= 3])
+        for (task_type,) in rows
+    ]
+
+
+def _infer_task_type(title: str, guide_map: list[tuple[str, list[str]]]) -> Optional[str]:
+    """
+    Map a task title to a known guide type.
+
+    Priority order:
+      1. Curated phrase map (_PHRASE_TO_TYPE) — exact substring match, highest precision.
+      2. Keyword scoring against guide type name components — requires ≥50% match.
+
+    Returns the matched task_type string, or None if no confident match.
+    """
+    title_lower = title.lower()
+
+    # Priority 1: curated phrase match
+    for phrase, guide_key in _PHRASE_TO_TYPE.items():
+        if phrase in title_lower:
+            return guide_key
+
+    # Priority 2: keyword scoring from guide type name split
+    best_type = None
+    best_score = 0.0
+
+    for task_type, keywords in guide_map:
+        if not keywords:
+            continue
+        matches = sum(1 for kw in keywords if kw in title_lower)
+        score = matches / len(keywords)
+        if matches > 0 and score > best_score:
+            best_score = score
+            best_type = task_type
+
+    return best_type if best_score >= 0.5 else None
+
+
+# ---------------------------------------------------------------------------
 # Core service
 # ---------------------------------------------------------------------------
 
@@ -122,6 +243,7 @@ def approve_workflow(
         db.add(life_event)
 
     existing = _existing_titles(db, request.life_event_id)
+    guide_map = _build_guide_map(db)
 
     created: list[CreatedTaskItem] = []
     skipped: list[str] = []
@@ -138,6 +260,11 @@ def approve_workflow(
                 continue
 
             logger.info("Processing task: %s", approved_task.title)
+            # ── Resolve guide type (explicit > inferred from title) ──────
+            resolved_task_type = approved_task.task_type or _infer_task_type(approved_task.title, guide_map)
+            if resolved_task_type and not approved_task.task_type:
+                logger.info("Inferred task_type='%s' for '%s'", resolved_task_type, approved_task.title)
+
             # ── Create parent task ───────────────────────────────────────
             parent = Task(
                 title=approved_task.title,
@@ -149,7 +276,8 @@ def approve_workflow(
                 parent_id=None,
                 reminder_opt_out=False,
                 phase_title=approved_task.phase_title,
-                task_type=approved_task.task_type,
+                phase_category=approved_task.phase_category,
+                task_type=resolved_task_type,
                 scheduled_date=approved_task.scheduled_date,
             )
             db.add(parent)
@@ -175,6 +303,7 @@ def approve_workflow(
                     skipped.append(sub.title)
                     continue
 
+                resolved_sub_type = sub.task_type or _infer_task_type(sub.title, guide_map)
                 child = Task(
                     title=sub.title,
                     description=None,
@@ -184,9 +313,10 @@ def approve_workflow(
                     life_event_id=request.life_event_id,
                     parent_id=parent.id,
                     reminder_opt_out=False,
-                    task_type=sub.task_type,
+                    task_type=resolved_sub_type,
                     scheduled_date=sub.scheduled_date,
-                    phase_title=approved_task.phase_title,  # Inherit parent's phase
+                    phase_title=approved_task.phase_title,
+                    phase_category=approved_task.phase_category,  # Inherit parent's phase/category
                 )
                 db.add(child)
                 db.flush()

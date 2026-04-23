@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getLifeEvents } from '../api/backend'
+import { getLifeEvents, deleteLifeEvent } from '../api/backend'
+import { getVaultDocs } from '../api/vault'
 import { getEventVisuals } from '../api/EventSymbols'
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal'
 import { 
   Search, 
   ArrowRight, 
@@ -24,21 +26,55 @@ export default function SavedPlans({ onViewDetail }) {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState('ALL') // ALL, COMPLETED, ACTIVE
+  
+  // Custom delete modal state
+  const [deleteId, setDeleteId] = useState(null)
+  const [deleteTitle, setDeleteTitle] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
+  const [vaultDocs, setVaultDocs] = useState([])
 
   useEffect(() => {
-    async function fetchPlans() {
+    async function fetchData() {
       try {
         setLoading(true)
-        const data = await getLifeEvents()
-        setPlans(data || [])
+        const [plansData, vaultData] = await Promise.all([
+          getLifeEvents(),
+          getVaultDocs()
+        ])
+        setPlans(plansData || [])
+        setVaultDocs(vaultData || [])
       } catch (err) {
-        console.error('Failed to fetch saved plans:', err)
+        console.error('Failed to fetch dashboard data:', err)
       } finally {
         setLoading(false)
       }
     }
-    fetchPlans()
+    fetchData()
   }, [])
+  
+  const handleDeleteEvent = async (id, title, e) => {
+     if (e) e.stopPropagation();
+     setDeleteError(null)
+     setDeleteId(id)
+     setDeleteTitle(title)
+  }
+
+  const confirmDelete = async () => {
+     if (!deleteId) return;
+     try {
+       setIsDeleting(true)
+       setDeleteError(null)
+       await deleteLifeEvent(deleteId)
+       setPlans(prev => prev.filter(p => p.id !== deleteId))
+       setDeleteId(null)
+     } catch (err) {
+       console.error("Failed to delete event:", err)
+       setDeleteError(err?.response?.data?.detail ?? "Could not erase this roadmap. Please check your connection.")
+     } finally {
+       setIsDeleting(false)
+     }
+  }
 
   const filteredPlans = useMemo(() => {
     return [...plans]
@@ -63,8 +99,7 @@ export default function SavedPlans({ onViewDetail }) {
     const total = plans.length
     const completed = plans.filter(p => p.status === 'completed').length
     const inProgress = total - completed
-    // Mocking docs handled for now
-    const docsTotal = plans.reduce((acc, p) => acc + (p.vault_count || 12), 0) 
+    const docsTotal = vaultDocs.length 
     
     return [
       { label: 'TOTAL EVENTS', value: total, icon: LayoutDashboard, color: 'var(--sky)' },
@@ -239,17 +274,46 @@ export default function SavedPlans({ onViewDetail }) {
               index={idx}
               total={filteredPlans.length}
               onOpen={() => onViewDetail(plan)}
+              onDelete={(e) => handleDeleteEvent(plan.id, plan.display_title || plan.title, e)}
             />
           ))}
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={!!deleteId}
+        onClose={() => {
+          if (!isDeleting) setDeleteId(null)
+        }}
+        onConfirm={confirmDelete}
+        planTitle={deleteTitle}
+        isDeleting={isDeleting}
+        error={deleteError}
+      />
     </div>
   )
 }
 
-function HistoryCard({ plan, index, total, onOpen }) {
+function _derivePlanTitle(plan) {
+  const raw = plan.display_title || plan.title || ''
+  const generic = ['new event', 'event', 'life event', 'personal event', 'untitled']
+  if (!generic.includes(raw.toLowerCase())) return raw
+  // Try to derive from stored metadata
+  try {
+    const meta = JSON.parse(plan.metadata_json || '{}')
+    if (meta.event_types && meta.event_types.length > 0) {
+      const label = meta.event_types[0].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
+      const loc = plan.location && plan.location.toLowerCase() !== 'null' ? plan.location : null
+      return loc ? `${label} in ${loc}` : label
+    }
+  } catch { /* ignore */ }
+  return raw || 'Personal Planning Journey'
+}
+
+function HistoryCard({ plan, index, total, onOpen, onDelete }) {
+  const planTitle = _derivePlanTitle(plan)
   // Always recalculate visuals locally to ensure latest icon mapping, fallback to saved visuals if function fails
-  const visuals = getEventVisuals(plan.title, plan.display_title) || plan.visuals
+  const visuals = getEventVisuals(planTitle, planTitle) || plan.visuals
   const { color, emoji, label, colorName, image } = visuals
   const isCompleted = plan.status === 'completed'
   const progress = plan.progress_pct || 0
@@ -299,7 +363,7 @@ function HistoryCard({ plan, index, total, onOpen }) {
         {/* Title Block */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           <h2 className="font-playfair" style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>
-            {plan.display_title || plan.title}
+            {planTitle}
           </h2>
           {/* Faux edit pen */}
           <div style={{ opacity: 0.15, fontSize: 13 }}>🖋</div>
@@ -355,7 +419,9 @@ function HistoryCard({ plan, index, total, onOpen }) {
             
             // 1. Location Fact (With sniffing fallback for old plans)
             let loc = plan.location;
-            if (!loc) {
+            // Guard against string "null" returned by LLM instead of JSON null
+            if (!loc || loc.toLowerCase() === 'null') {
+              loc = null;
               const cities = ["mumbai", "bangalore", "delhi", "pune", "hyderabad", "chennai", "kolkata", "london", "ny", "nyc", "york"];
               const found = cities.find(c => pageTitle.includes(c));
               if (found) loc = found.charAt(0).toUpperCase() + found.slice(1);
@@ -433,7 +499,9 @@ function HistoryCard({ plan, index, total, onOpen }) {
                 <Clock size={13} color={color} /> {isCompleted ? 'ARCHIVED' : 'STRATEGIC ROADMAP'}
               </div>
               <motion.div 
-                whileHover={{ opacity: 1 }}
+                whileHover={{ opacity: 1, scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onDelete}
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 

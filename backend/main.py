@@ -6,10 +6,12 @@ import os
 
 from backend.database import init_db
 from backend.routes import (
-    life_event_routes, nlp_routes, rag_routes, task_routes, 
+    life_event_routes, nlp_routes, rag_routes, task_routes,
     user_routes, workflow_routes, recommendation_routes,
-    vault_routes, simulation_routes, personal_event_routes
+    vault_routes, simulation_routes, personal_event_routes,
+    auth_routes, admin_routes,
 )
+from backend.routes import plan_chat_routes
 from backend.scheduler import start_scheduler, stop_scheduler
 
 
@@ -55,6 +57,9 @@ app.include_router(recommendation_routes.router, prefix="/api/life-events", tags
 app.include_router(vault_routes.router, prefix="/api/vault", tags=["Vault"])
 app.include_router(simulation_routes.router, prefix="/api/simulate", tags=["Simulation"])
 app.include_router(personal_event_routes.router, prefix="/api/personal-events", tags=["Personal Events"])
+app.include_router(auth_routes.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(plan_chat_routes.router, prefix="/api/life-events", tags=["Plan Chat"])
+app.include_router(admin_routes.router, prefix="/api/admin", tags=["Admin"])
 
 
 @app.get("/")

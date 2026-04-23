@@ -7,7 +7,7 @@
  * Design spec: guide-me-brief.html
  * Backend logic: backend/routes/task_routes.py (4-layer intelligence)
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { Clipboard, Check, X, Upload } from 'lucide-react'
@@ -292,11 +292,163 @@ function normalizeText(content) {
     .join('\n')
 }
 
-export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
+/**
+ * Returns a specific, helpful 1-2 sentence hint based on the full subtask title.
+ * Uses double-quoted strings to avoid apostrophe parse issues.
+ */
+function getSubtaskHint(title) {
+  if (!title) return ""
+  const t = title.toLowerCase()
+
+  // Document / proof gathering
+  if (/identity|address proof|id proof/.test(t))
+    return "Collect government-issued photo ID (Aadhaar, PAN, Passport) and a recent address proof (utility bill, bank statement) for each person involved."
+  if (/photograph/.test(t))
+    return "Arrange recent passport-size photographs with a white or light background. Typically required for each applicant."
+  if (/income.*proof|salary.*slip|itr|income tax return/.test(t))
+    return "Gather your last 2-3 salary slips or the most recent ITR acknowledgement from the Income Tax portal."
+  if (/bank.*statement/.test(t))
+    return "Download the last 3-6 months of bank statements from your net banking portal as a PDF."
+  if (/noc|no.*objection/.test(t))
+    return "Obtain this from the relevant authority (landlord, society, or employer) on official letterhead."
+  if (/pan card|pan number/.test(t))
+    return "Ensure PAN is linked to Aadhaar. Download a copy from the NSDL or UTIITSL portal if needed."
+  if (/aadhaar|aadhar/.test(t))
+    return "Use your linked mobile number to download an e-Aadhaar from uidai.gov.in if you need a digital copy."
+  if (/passport/.test(t))
+    return "Ensure your passport is valid and the address page is clearly scanned. It serves as both ID and address proof."
+
+  // Business / legal setup
+  if (/business name|proposed.*name/.test(t))
+    return "Choose a unique name and verify availability on the MCA portal (mca.gov.in) before proceeding with registration."
+  if (/description.*activit|brief.*description|nature.*business/.test(t))
+    return "Write 2-3 clear sentences describing what your business does. This appears in official registration documents."
+  if (/partnership deed/.test(t))
+    return "The deed must specify partner names, capital contributions, profit-sharing ratio, and roles. Have it notarised or registered."
+  if (/incorporation.*document|memorandum|moa|aoa/.test(t))
+    return "Prepare MOA (Memorandum of Association) and AOA (Articles of Association). These define company purpose, structure, and rules."
+  if (/gst.*register|gst registration|gstin/.test(t))
+    return "Register on the GST portal (gst.gov.in) with your PAN, Aadhaar, and business documents. Approval typically takes 3-7 working days."
+  if (/msme|udyam|udyog/.test(t))
+    return "Register on the Udyam portal for free. It gives access to government schemes and subsidies for small businesses."
+
+  // Financial / banking
+  if (/bank account|current account/.test(t))
+    return "You will need the account number, IFSC code, and bank branch details. A cancelled cheque may also be required."
+  if (/pay.*fee|registration.*fee|stamp.*duty/.test(t))
+    return "Complete the payment using net banking or UPI on the official portal. Save the payment receipt or acknowledgement number."
+  if (/capital|share.*capital/.test(t))
+    return "Define the authorised and paid-up share capital for your company. This affects registration fees and filing requirements."
+
+  // Submission / uploading
+  if (/upload|scan|attach/.test(t))
+    return "Scan documents at 200 DPI or higher. Accepted formats are usually PDF or JPEG under 2MB. Check the portal requirements."
+  if (/submit|application|apply/.test(t))
+    return "Review all details before submitting. Note the application or reference number shown after submission for future tracking."
+  if (/sign|e-sign|digital signature|dsc/.test(t))
+    return "Digital signatures (DSC) can be obtained from certified agencies. Ensure the DSC is valid and the correct type (Class 2 or 3)."
+
+  // Verification / review
+  if (/verify|confirm|check|review/.test(t))
+    return "Cross-check all spellings, dates, and numbers carefully before proceeding. Errors here can delay approval significantly."
+
+  // Fallback by first verb
+  const verb = t.split(" ")[0]
+  if (/gather|collect|obtain|get/.test(verb))
+    return "Collect and organise these materials in advance. Having them ready avoids delays in subsequent steps."
+  if (/prepare|create|draft|make/.test(verb))
+    return "Prepare this carefully and keep a copy. It may be referenced or submitted in a later step."
+  if (/decide|choose|select/.test(verb))
+    return "Finalise this decision before moving forward. It will be referenced in official documents."
+
+  return "Complete and tick off this step to continue progressing through your journey."
+}
+
+/**
+ * Returns a relevant official portal link for a subtask based on keyword detection.
+ * Covers common Indian government and business portals.
+ * Used as a fallback when the AI guide did not generate a step for this subtask.
+ */
+function getSmartLink(title, desc = "") {
+  const t = ((title || "") + " " + (desc || "")).toLowerCase()
+  if (!t.trim()) return null
+
+  // Business registration / MCA
+  if (/business name|name.*availab|proposed.*name|register.*name/.test(t))
+    return { type: 'link', label: "Check name availability on MCA →", url: "https://www.mca.gov.in/mcafoportal/enquiryForNameAvailability.do" }
+  if (/cin|llpin|spice|incorporation|register.*business|business.*register/.test(t))
+    return { type: 'link', label: "Open MCA SPICe+ form →", url: "https://www.mca.gov.in/content/mca/global/en/mca/forms-filings.html" }
+  if (/mca|ministry.*corporate|company.*registration/.test(t))
+    return { type: 'link', label: "Open MCA portal →", url: "https://www.mca.gov.in" }
+
+  // GST
+  if (/gst|gstin|goods.*service.*tax/.test(t))
+    return { type: 'link', label: "Open GST portal →", url: "https://www.gst.gov.in" }
+
+  // Income Tax / ITR
+  if (/income tax|itr|e-filing|tax.*return/.test(t))
+    return { type: 'link', label: "Open Income Tax e-Filing →", url: "https://www.incometax.gov.in" }
+
+  // PAN
+  if (/pan card|pan number|apply.*pan/.test(t))
+    return { type: 'link', label: "Apply for PAN on NSDL →", url: "https://www.onlineservices.nsdl.com/paam/endUserRegisterContact.html" }
+
+  // Aadhaar
+  if (/aadhaar|aadhar|uidai/.test(t))
+    return { type: 'link', label: "Open UIDAI portal →", url: "https://uidai.gov.in" }
+
+  // Passport
+  if (/passport/.test(t))
+    return { type: 'link', label: "Open Passport Seva portal →", url: "https://www.passportindia.gov.in" }
+
+  // MSME / Udyam
+  if (/msme|udyam|udyog|small.*business.*register/.test(t))
+    return { type: 'link', label: "Register on Udyam portal →", url: "https://udyamregistration.gov.in" }
+
+  // Bank / account
+  if (/bank account|current account|open.*account/.test(t))
+    return { type: 'link', label: "Find RBI-approved banks →", url: "https://www.rbi.org.in/Scripts/bs_viewcontent.aspx?Id=2009" }
+
+  // Trademark
+  if (/trademark|brand.*register|logo.*register/.test(t))
+    return { type: 'link', label: "Search trademarks on IP India →", url: "https://ipindiaonline.gov.in/tmrpublicsearch/frmmain.aspx" }
+
+  // Digital signature
+  if (/digital signature|dsc|e-sign/.test(t))
+    return { type: 'link', label: "Get DSC from eMudhra →", url: "https://www.emudhra.com/digital-signature/dsc-for-companies/" }
+
+  // Property / rent / lease
+  if (/rental agreement|lease deed|property.*register/.test(t))
+    return { type: 'link', label: "Find registration office →", url: "https://igrs.gov.in" }
+
+  // Labour / employment
+  if (/pf|provident fund|epfo|esic|labour registration/.test(t))
+    return { type: 'link', label: "Open EPFO portal →", url: "https://www.epfindia.gov.in" }
+
+  // Visa
+  if (/visa|e-visa/.test(t))
+    return { type: 'link', label: "Apply for e-Visa →", url: "https://indianvisaonline.gov.in/evisa/tvoa.html" }
+
+  // Driving licence
+  if (/driving.*licen|dl renewal/.test(t))
+    return { type: 'link', label: "Open Parivahan portal →", url: "https://parivahan.gov.in" }
+
+  // Vehicle registration
+  if (/vehicle.*register|rc book|registration.*certificate/.test(t))
+    return { type: 'link', label: "Open Parivahan portal →", url: "https://vahan.nic.in" }
+
+  // No link available
+  return null
+}
+
+
+export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onToggleSubtask }) {
   const [guide, setGuide] = useState(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(null)
   const [stepStates, setStepStates] = useState([])
+  // Tracks the real subtask IDs in order, if steps are backed by subtasks
+  const subtaskIdsRef = useRef([])
 
   // Display fallbacks
   const displayTitle = guide?.title || task?.title || 'Task Assistant'
@@ -345,57 +497,138 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 6000)
 
+    const hasSubtasks = task.subtasks?.length > 0
+
     fetch(`/api/tasks/${task.id}/guide`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         clearTimeout(timeout)
-        if (data?.has_guide) {
-          // Normalize step descriptions
+
+        if (hasSubtasks) {
+          subtaskIdsRef.current = task.subtasks.map(s => s.id)
+
+          // Build a keyword-overlap scorer to find the best-matching AI description
+          // for each subtask title. This is better than index-matching (which breaks
+          // when step counts differ) and avoids wrong AI descriptions being shown.
+          const aiSteps = data?.steps?.map(s => ({
+            ...s,
+            description: normalizeText(s.description),
+            _words: new Set((s.title + ' ' + s.description).toLowerCase().match(/\w{4,}/g) ?? [])
+          })) ?? []
+
+          // Title-weighted scorer: title word overlap counts 3x, description overlap 1x.
+          // This prevents a false match where a few shared description words
+          // (e.g. "address proof") beat a semantically unrelated but description-matching step.
+          // Minimum score of 3 means at least one shared title word is required.
+          const getAiMatch = (subtaskTitle) => {
+            if (!aiSteps.length) return { description: null, action: null }
+            const subtaskTitleWords = new Set(subtaskTitle.toLowerCase().match(/\w{4,}/g) ?? [])
+            let best = null, bestScore = 0
+            for (const aiStep of aiSteps) {
+              const aiTitleWords = new Set((aiStep.title || "").toLowerCase().match(/\w{4,}/g) ?? [])
+              let score = 0
+              for (const w of subtaskTitleWords) {
+                if (aiTitleWords.has(w)) score += 3      // strong: title-to-title match
+                else if (aiStep._words.has(w)) score += 1 // weak: description-only match
+              }
+              if (score > bestScore) { bestScore = score; best = aiStep }
+            }
+            // Score >= 3 means at least one shared title word (prevents description-only false positives)
+            if (bestScore >= 3) return { description: best?.description ?? null, action: best?.action ?? null }
+            return { description: null, action: null }
+          }
+
+          const matchedAiIndices = new Set()
+
+          const steps = task.subtasks.map((s) => {
+            if (!aiSteps.length) {
+              return {
+                title: s.title,
+                description: s.description || getSubtaskHint(s.title),
+                action: getSmartLink(s.title),
+              }
+            }
+            const subtaskTitleWords = new Set(s.title.toLowerCase().match(/\w{4,}/g) ?? [])
+            let bestIdx = -1, bestScore = 0
+            aiSteps.forEach((aiStep, idx) => {
+              const aiTitleWords = new Set((aiStep.title || "").toLowerCase().match(/\w{4,}/g) ?? [])
+              let score = 0
+              for (const w of subtaskTitleWords) {
+                if (aiTitleWords.has(w)) score += 3
+                else if (aiStep._words.has(w)) score += 1
+              }
+              if (score > bestScore) { bestScore = score; bestIdx = idx }
+            })
+            const matched = bestScore >= 3 ? aiSteps[bestIdx] : null
+            if (matched) matchedAiIndices.add(bestIdx)
+            const finalDesc = s.description || matched?.description || getSubtaskHint(s.title);
+            return {
+              title: s.title,
+              description: finalDesc,
+              action: matched?.action ?? getSmartLink(s.title, finalDesc),
+            }
+          })
+
+          // AI steps that didn't match any subtask — shown as bonus "AI guide" steps
+          const extraSteps = aiSteps
+            .map((aiStep, idx) => ({ ...aiStep, _idx: idx }))
+            .filter(aiStep => !matchedAiIndices.has(aiStep._idx))
+            .map(({ _words, _idx, ...rest }) => ({ ...rest, action: rest.action ?? getSmartLink(rest.title, rest.description) })) // strip internal fields
+
+          const finalSteps = [...steps, ...extraSteps]
+
+          setGuide({
+            title: task.title,
+            intro: data?.intro ? normalizeText(data.intro) : task.description,
+            steps: finalSteps,
+            has_guide: true,
+            url: data?.url,
+            url_note: data?.url_note,
+            estimated_mins: data?.estimated_mins,
+            prefilled: data?.prefilled,
+            required_docs: data?.required_docs,
+            expected_result: data?.expected_result,
+            what_to_save: data?.what_to_save,
+          })
+          setStepStates([...task.subtasks.map(s => s.done ? 'done' : 'todo'), ...extraSteps.map(() => 'todo')])
+
+        } else if (data?.has_guide) {
+          // No subtasks — use AI steps directly (nothing to sync)
           if (data.steps && Array.isArray(data.steps)) {
-            data.steps = data.steps.map((s) => ({
-              ...s,
-              description: normalizeText(s.description),
-            }))
+            data.steps = data.steps.map((s) => {
+              const d = normalizeText(s.description);
+              return {
+                ...s,
+                description: d,
+                action: s.action ?? getSmartLink(s.title, d),
+              }
+            })
           }
           if (data.intro) data.intro = normalizeText(data.intro)
-
           setGuide(data)
-          if (data.steps?.length) {
-            // First step is active, rest are todo
-            setStepStates(data.steps.map((_, i) => (i === 0 ? 'active' : 'todo')))
-          }
+          setStepStates(data.steps?.map((_, i) => (i === 0 ? 'active' : 'todo')) ?? [])
+
         } else {
-          // Fallback to subtasks if no guide
-          if (task.subtasks?.length > 0) {
-            setGuide({
-              title: task.title,
-              intro: task.description,
-              steps: task.subtasks.map((s) => ({
-                title: s.title,
-                description:
-                  s.description || 'Essential sub-step to fulfill the requirements of the main task.',
-              })),
-              has_guide: true,
-            })
-            setStepStates(task.subtasks.map((_, i) => (i === 0 ? 'active' : 'todo')))
-          } else {
-            setGuide(null)
-          }
+          setGuide(null)
         }
         setLoading(false)
       })
       .catch((err) => {
         clearTimeout(timeout)
         console.error('Guide fetch error:', err)
-        // Local fallback
-        if (task.subtasks?.length > 0) {
+        // Offline fallback — subtasks only
+        if (hasSubtasks) {
+          subtaskIdsRef.current = task.subtasks.map(s => s.id)
           setGuide({
             title: task.title,
             intro: task.description,
-            steps: task.subtasks.map((s) => ({ title: s.title, description: '' })),
+            steps: task.subtasks.map((s) => ({
+              title: s.title,
+              description: s.description || 'Complete this step to progress the task.',
+            })),
             has_guide: true,
           })
-          setStepStates(task.subtasks.map((_, i) => (i === 0 ? 'active' : 'todo')))
+          setStepStates([...task.subtasks.map(s => s.done ? 'done' : 'todo'), ...extraSteps.map(() => 'todo')])
         }
         setLoading(false)
       })
@@ -413,11 +646,17 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
       const next = [...prev]
       const current = next[idx]
 
-      if (current === 'done') {
-        next[idx] = 'active' // Undo
-      } else {
-        next[idx] = 'done' // Mark done
-        // Auto-activate next incomplete step
+      const nextIsDone = current === 'done' ? false : true
+      next[idx] = nextIsDone ? 'done' : 'active'
+
+      // If backed by a real subtask, sync to parent
+      const subtaskId = subtaskIdsRef.current[idx]
+      if (subtaskId != null && onToggleSubtask) {
+        onToggleSubtask(task.id, subtaskId)
+      }
+
+      // Auto-activate next incomplete step
+      if (nextIsDone) {
         const nextIncomplete = next.findIndex((s, i) => i > idx && s === 'todo')
         if (nextIncomplete !== -1) {
           next[nextIncomplete] = 'active'
@@ -427,8 +666,13 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
     })
   }
 
-  const doneCount = stepStates.filter((s) => s === 'done').length
-  const progressPct = stepStates.length ? (doneCount / stepStates.length) * 100 : 0
+  // Progress: use real subtask completion when subtasks exist, otherwise guide step progress
+  const subtasks = task?.subtasks ?? []
+  const subtaskDoneCount = subtasks.filter(s => s.done).length
+  const hasRealSubtasks = subtasks.length > 0
+  const doneCount = hasRealSubtasks ? subtaskDoneCount : stepStates.filter((s) => s === 'done').length
+  const totalCount = hasRealSubtasks ? subtasks.length : stepStates.length
+  const progressPct = totalCount ? (doneCount / totalCount) * 100 : 0
 
   return createPortal(
     <AnimatePresence>
@@ -643,9 +887,7 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
                             ...S.stepNum,
                             ...(state === 'done'
                               ? { background: '#5c8c75' }
-                              : state === 'active'
-                                ? { background: '#d47c3f' }
-                                : { background: 'rgba(255, 255, 255, 0.08)', color: 'rgba(255, 255, 255, 0.38)' }),
+                              : { background: '#d47c3f', color: '#fff' }),
                           }}
                         >
                           {state === 'done' ? <Check size={12} strokeWidth={4} /> : idx + 1}
@@ -656,7 +898,7 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
                           <div
                             style={{
                               ...S.stepTitle,
-                              color: state === 'todo' ? 'rgba(184, 207, 199, 0.4)' : '#f7f4ee',
+                              color: '#f7f4ee',
                             }}
                           >
                             {step.title}
@@ -666,7 +908,7 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
                           {/* Action buttons */}
                           <div style={S.stepActions}>
                             {/* Open URL button */}
-                            {step.action && step.action.type === 'link' && (
+                            {step.action && (step.action.type === 'link' || step.action.url) && (
                               <a
                                 href={step.action.url}
                                 target="_blank"
@@ -674,12 +916,12 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
                                 onClick={(e) => e.stopPropagation()}
                                 style={{
                                   ...S.actionBtn,
-                                  background: 'rgba(92, 140, 117, 0.1)',
-                                  borderColor: 'rgba(92, 140, 117, 0.25)',
-                                  color: '#5c8c75',
+                                  background: 'rgba(212, 124, 63, 0.1)',
+                                  borderColor: 'rgba(212, 124, 63, 0.25)',
+                                  color: '#f0a96b',
                                 }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(92, 140, 117, 0.18)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(92, 140, 117, 0.1)')}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(212, 124, 63, 0.18)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(212, 124, 63, 0.1)')}
                               >
                                 {step.action.label || 'Open Resource'} →
                               </a>
@@ -751,6 +993,12 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate }) {
                   whileHover={{ transform: 'translateY(-2px)', boxShadow: '0 6px 22px rgba(212, 124, 63, 0.38)' }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
+                    // Mark all undone subtasks as done before completing the task
+                    if (onToggleSubtask && task?.subtasks?.length > 0) {
+                      task.subtasks.forEach(s => {
+                        if (!s.done) onToggleSubtask(task.id, s.id)
+                      })
+                    }
                     if (onMarkDone) onMarkDone(task.id)
                     onClose()
                   }}

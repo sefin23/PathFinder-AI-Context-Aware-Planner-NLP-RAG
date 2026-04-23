@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Text
+from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -8,6 +8,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
+
+    # Authentication
+    hashed_password = Column(String, nullable=True)
+    auth_token = Column(String, nullable=True, index=True)
+    token_expires_at = Column(String, nullable=True)  # ISO datetime string (UTC)
 
     # IANA timezone name (e.g. "Asia/Kolkata", "America/New_York").
     # All due_date values are stored in UTC; this field is used to convert
@@ -22,6 +27,20 @@ class User(Base):
     # Portal Registry fields
     job_city = Column(String(100), nullable=True)
     state_code = Column(String(10), nullable=True)
+
+    # Notification Preferences
+    email_notifications = Column(Boolean, default=True)
+    last_brief_sent_at = Column(DateTime, nullable=True)
+    notif_smart_alerts = Column(Boolean, default=True)
+    notif_progress_checkins = Column(Boolean, default=False)
+    notif_phase_completions = Column(Boolean, default=True)
+    notif_journey_completed = Column(Boolean, default=True)
+    notif_weekly_summary = Column(Boolean, default=False)
+
+    # AI Behavior Preferences
+    ai_clarification = Column(Boolean, default=True)
+    ai_confidence = Column(Boolean, default=False)
+    ai_badges = Column(Boolean, default=True)
 
     # Relationships
     life_events = relationship("LifeEvent", back_populates="user", cascade="all, delete-orphan")

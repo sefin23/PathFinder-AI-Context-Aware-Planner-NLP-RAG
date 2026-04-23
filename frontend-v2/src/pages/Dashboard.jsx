@@ -34,15 +34,27 @@ import {
   getUser,
   updateUser,
   saveRequirements,
+  getCurrentUserId
 } from '../api/backend'
 
 const STEP_MS = 600
 
 export default function Dashboard() {
   const [activePage, setActivePage] = useState('dashboard')
-  const [selectedPlan, setSelectedPlan] = useState(null) // { id, title, description }
-  const [showDocs, setShowDocs] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(null)
+  const [user, setUser] = useState(null)
   
+  // Fetch user profile on mount to sync name across UI
+  useEffect(() => {
+    getUser().then(data => setUser(data)).catch(err => console.error("Failed to fetch user:", err))
+  }, [])
+
+  // Listen for profile updates from Settings page
+  useEffect(() => {
+    const handleProfileUpdate = (e) => { if (e.detail) setUser(e.detail) }
+    window.addEventListener('pathfinder-profile-update', handleProfileUpdate)
+    return () => window.removeEventListener('pathfinder-profile-update', handleProfileUpdate)
+  }, [])
 
   // Pipeline state machine
   const [stage, setStage] = useState('idle')
@@ -82,6 +94,7 @@ export default function Dashboard() {
   const [approved, setApproved] = useState(false)
   const [approving, setApproving] = useState(false)
   const [showSaveSuccess, setShowSaveSuccess] = useState(false)
+  const [showDocs, setShowDocs] = useState(false)
 
   // Scroll to recommendations when they arrive
   useEffect(() => {
@@ -211,9 +224,9 @@ export default function Dashboard() {
          const requirements = await retrieveRequirements(newText, primaryType, 5)
          setRequirementsData(requirements)
    
-         const workflow = await proposeWorkflow(eventTypes, location, timeline)
+         const workflow = await proposeWorkflow(eventTypes, location, timeline, null, newText)
          setWorkflowData(workflow)
-         
+
          setStage('complete')
        } catch (err) {
          setErrorMsg(err?.response?.data?.detail ?? err.message ?? 'Refinement failed.')
@@ -276,7 +289,7 @@ export default function Dashboard() {
     setStage('generating')
     let workflow
     try {
-      workflow = await proposeWorkflow(eventTypes, location, timeline)
+      workflow = await proposeWorkflow(eventTypes, location, timeline, null, userText)
       await new Promise(r => setTimeout(r, STEP_MS))
       if (!workflow?.success) {
         throw new Error(workflow?.error ?? 'Workflow generation unsuccessful.')
@@ -307,7 +320,7 @@ export default function Dashboard() {
     }
 
     try {
-      const workflow = await proposeWorkflow(updatedTypes, analysisData.location, analysisData.timeline)
+      const workflow = await proposeWorkflow(updatedTypes, analysisData.location, analysisData.timeline, null, analysisData.last_text || null)
       setWorkflowData(workflow)
       setStage('complete')
     } catch (err) {
@@ -331,17 +344,27 @@ export default function Dashboard() {
 
   const handleApprove = useCallback(async (tasks, startDate) => {
     setApproving(true)
+    setStage('approving')
     setErrorMsg(null)
     try {
-      const eventName = analysisData?.display_title || 
-                       `${analysisData?.life_event_types?.[0]?.replace(/_/g, ' ') || 'New Event'}${analysisData?.location ? ` to ${analysisData.location}` : ''}`
+      const _rawTitle = analysisData?.display_title || ''
+      const _genericTitles = ['new event', 'event', 'life event', 'personal event', 'untitled']
+      const _isGenericTitle = !_rawTitle || _genericTitles.includes(_rawTitle.toLowerCase())
+      const _cleanLoc = (analysisData?.location && analysisData.location.toLowerCase() !== 'null') ? analysisData.location : null
+      const _typeLabel = analysisData?.life_event_types?.[0]?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase())
+      const eventName = _isGenericTitle
+        ? (_typeLabel ? (_cleanLoc ? `${_typeLabel} in ${_cleanLoc}` : _typeLabel) : 'Personal Planning Journey')
+        : _rawTitle
+
+      const rawDesc = analysisData?.enriched_narrative || analysisData?.last_text || ''
+      const cleanDesc = rawDesc.replace(/\.\s*Additional context\s*—.*$/s, '').trim()
 
       const lifeEvent = await createLifeEvent(
-        eventName, 
-        analysisData?.enriched_narrative || analysisData?.last_text || '', 
-        1, 
-        analysisData?.display_title,
-        analysisData?.location,
+        eventName,
+        cleanDesc,
+        getCurrentUserId(),
+        eventName,
+        _cleanLoc,
         analysisData?.timeline,
         JSON.stringify({
           original_input: analysisData?.last_text,
@@ -362,34 +385,42 @@ export default function Dashboard() {
       
       await approveWorkflow(lifeEventId, tasksToApprove, startDate)
       
-      // Persist requirements permanently to DB right at creation time
+      // PERSIST REQUIREMENTS - If this fails, we don't care, it's just a cache benefit
       if (requirementsData) {
-        saveRequirements(lifeEventId, requirementsData).catch(e => console.warn('Could not persist requirements:', e))
+        saveRequirements(lifeEventId, requirementsData).catch(e => console.warn('Requirements persistence failed (non-critical):', e))
       }
       
+      // VISUAL CONFIRMATION: Show success immediately in the pill
+      setStage('approved')
       setApproved(true)
-
-      const fullEvent = await getLifeEvent(lifeEventId)
-      if (fullEvent?.tasks) {
-         const dbTasks = fullEvent.tasks.filter(t => !t.parent_id)
-         const subtasks = fullEvent.tasks.filter(t => t.parent_id)
-         
-         const nested = dbTasks.map(t => ({
-           ...t,
-           subtasks: subtasks.filter(s => s.parent_id === t.id)
-         }))
-         
-         setWorkflowData({ success: true, tasks: nested })
-      }
-      
-      const recData = await getRecommendations(lifeEventId)
-      setRecommendations(recData?.recommendations?.length > 0 ? recData.recommendations : [
-        { message: "Roadmap secured. Focus on the high-impact documents listed first.", reason: "Next Steps" },
-        { message: "Set chronological alerts for the timeline steps to avoid bottlenecks.", reason: "Efficiency Tip" }
-      ])
-      
       setAnalysisData(prev => ({ ...prev, db_id: lifeEventId }))
       setShowSaveSuccess(true)
+
+      // FETCH AUXILIARY DATA - Try to get full details for a smooth transition, but don't crash the UI if these fails
+      try {
+        const fullEvent = await getLifeEvent(lifeEventId)
+        if (fullEvent?.tasks) {
+          const dbTasks = (fullEvent.tasks || []).filter(t => !t.parent_id)
+          const subtasks = (fullEvent.tasks || []).filter(t => t.parent_id)
+          const nested = dbTasks.map(t => ({
+            ...t,
+            subtasks: subtasks.filter(s => s.parent_id === t.id)
+          }))
+          setWorkflowData({ success: true, tasks: nested })
+        }
+      } catch (e) {
+        console.warn("Post-approval data sync failed (non-critical):", e)
+      }
+
+      try {
+        const recData = await getRecommendations(lifeEventId)
+        setRecommendations(recData?.recommendations?.length > 0 ? recData.recommendations : [
+          { message: "Roadmap secured. Focus on the high-impact documents listed first.", reason: "Next Steps" },
+          { message: "Set chronological alerts for the timeline steps to avoid bottlenecks.", reason: "Efficiency Tip" }
+        ])
+      } catch (e) {
+        console.warn("Post-approval recommendations failed (non-critical):", e)
+      }
       
     } catch (err) {
       console.error('Approval failed:', err)
@@ -399,7 +430,7 @@ export default function Dashboard() {
     } finally {
       setApproving(false)
     }
-  }, [analysisData])
+  }, [analysisData, requirementsData, workflowData])
 
   const handleTaskStatusToggle = useCallback(async (taskId, currentStatus, isSubtask = false) => {
     if (!analysisData?.db_id) return
@@ -441,7 +472,7 @@ export default function Dashboard() {
         `
       }} />
 
-      <Sidebar activePage={activePage} onNavigate={(p) => navigateTo(p)} />
+      <Sidebar user={user} activePage={activePage} onNavigate={(p) => navigateTo(p)} />
 
       <main style={{ flex: 1, position: 'relative', overflowY: 'hidden', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
         
@@ -620,7 +651,20 @@ export default function Dashboard() {
                 <ErrorBoundary>
                   <JourneyDetail
                     planId={selectedPlan.id}
-                    planTitle={selectedPlan.display_title || selectedPlan.title}
+                    planTitle={(() => {
+                      const raw = selectedPlan.display_title || selectedPlan.title || ''
+                      const generic = ['new event', 'event', 'life event', 'personal event', 'untitled']
+                      if (!generic.includes(raw.toLowerCase())) return raw
+                      try {
+                        const meta = JSON.parse(selectedPlan.metadata_json || '{}')
+                        if (meta.event_types?.length > 0) {
+                          const label = meta.event_types[0].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
+                          const loc = selectedPlan.location && selectedPlan.location.toLowerCase() !== 'null' ? selectedPlan.location : null
+                          return loc ? `${label} in ${loc}` : label
+                        }
+                      } catch { /* ignore */ }
+                      return raw || 'Personal Planning Journey'
+                    })()}
                     planDescription={selectedPlan.description}
                     onBack={() => navigateTo('saved')}
                     onNavigate={navigateTo}

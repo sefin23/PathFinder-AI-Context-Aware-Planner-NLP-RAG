@@ -6,7 +6,7 @@ Usage:
 
 What it does:
   1. Initialises the DB (creates the knowledge_base table if needed).
-  2. Inserts 30 curated requirement entries covering all Tier 1 life events.
+  2. Inserts ~70 curated requirement entries covering Tier 1 and Tier 2 life events.
   3. Calls Gemini Embedding 2 to embed each entry's content.
   4. Saves embeddings back to the DB.
 
@@ -15,7 +15,7 @@ Rules:
   - No web scraping — all content is hand-curated from the Life Events Library.
   - Run this ONCE after first deployment, or after adding new entries.
 
-Estimated time: ~2 minutes (30 Gemini API calls with rate-limit delay).
+Estimated time: ~5 minutes (~70 Gemini API calls with rate-limit delay).
 """
 
 import json
@@ -1208,6 +1208,338 @@ SEED_ENTRIES: list[dict] = [
             "In India, many agreements must be executed on Non-Judicial Stamp Paper of "
             "appropriate value and notarised or registered at a sub-registrar office to "
             "be legally enforceable in a dispute."
+        ),
+    },
+
+    # ── RENTAL_VERIFICATION (India Police Verification) ──────────────────────
+    {
+        "life_event_type": LifeEventType.RENTAL_VERIFICATION,
+        "title": "Tenant Police Verification Process in India",
+        "content": (
+            "Tenant police verification is mandatory in many Indian cities including Delhi, "
+            "Bengaluru, and Mumbai. Documents required: signed rent agreement, landlord "
+            "ownership proof (sale deed or tax receipt), Aadhaar copies of both landlord "
+            "and tenant, and passport photos. Apply through state police portals — Delhi "
+            "Police, Karnataka Police (online), or Maharashtra Police — or visit the "
+            "local police station directly. Processing takes a few days to two weeks "
+            "depending on the city. Missing this step can attract penalties for the landlord."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.RENTAL_VERIFICATION,
+        "title": "Common Mistakes in Tenant Verification India",
+        "content": (
+            "The most frequent mistakes in tenant police verification are: skipping it "
+            "entirely in cities where it is legally required, submitting incomplete forms "
+            "without the landlord's ownership proof (causing silent rejection), and not "
+            "retaining a copy of the verification acknowledgement number for future "
+            "reference. Landlords must complete verification even for existing long-term "
+            "tenants when they renew agreements."
+        ),
+    },
+
+    # ── ELDERCARE_MANAGEMENT (India-specific) ────────────────────────────────
+    {
+        "life_event_type": LifeEventType.ELDERCARE_MANAGEMENT,
+        "title": "Managing Pension and EPFO for Senior Parents in India",
+        "content": (
+            "To manage elderly parents' pensions in India: locate the Pension Payment Order "
+            "(PPO) and verify the pension-disbursing bank. For EPFO Employees' Pension "
+            "Scheme (EPS), corrections and transfers are done via the EPFO member portal. "
+            "Pension corrections or branch transfers can take several weeks to a few months. "
+            "Update nominee details in all bank accounts and insurance policies — these "
+            "are often outdated and cause major delays during emergencies."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.ELDERCARE_MANAGEMENT,
+        "title": "Ayushman Bharat and State Health Schemes for Senior Citizens",
+        "content": (
+            "Senior citizens in India may be eligible for Ayushman Bharat (PM-JAY) "
+            "covering hospitalisation up to ₹5 lakh/year, or state equivalents like "
+            "Arogya Karnataka or Chief Minister's Health Insurance. Enrollment requires "
+            "Aadhaar, ration card, and BPL or eligibility certificate. Processing "
+            "typically takes 1–4 weeks. Additionally, register for local senior citizen "
+            "identity cards issued by municipal offices for priority counters, rail "
+            "concessions, and community helplines."
+        ),
+    },
+
+    # ── EDUCATION_FINANCING (India-specific) ─────────────────────────────────
+    {
+        "life_event_type": LifeEventType.EDUCATION_FINANCING,
+        "title": "Vidya Lakshmi Portal and NSP for Education Loans and Scholarships",
+        "content": (
+            "The Vidya Lakshmi portal (vidyalakshmi.co.in) is a single-window platform "
+            "where students can apply for education loans from multiple banks simultaneously. "
+            "The National Scholarship Portal (scholarships.gov.in) lists central and state "
+            "government scholarships — apply before the deadline, typically August–October. "
+            "Documents needed: admission letter, fee structure, academic marksheets, income "
+            "proof of co-applicant, and Aadhaar. Bank loan processing can take days to "
+            "several months depending on collateral and lender; start at least 3 months "
+            "before the fee payment deadline."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.EDUCATION_FINANCING,
+        "title": "Common Mistakes in Indian Education Loan Applications",
+        "content": (
+            "Frequent education loan mistakes in India include: starting the loan process "
+            "too close to fee-payment deadlines leaving no buffer for document queries, "
+            "submitting incomplete co-applicant income proofs (missing ITR or salary slips), "
+            "and not checking collateral requirements for loans above ₹7.5 lakh. For "
+            "study-abroad loans, students often miss reviewing the moratorium terms and "
+            "currency risk for EMIs repaid in rupees on foreign-currency fees."
+        ),
+    },
+
+    # ── CAREER_TRANSITION (India EPF / F&F) ──────────────────────────────────
+    {
+        "life_event_type": LifeEventType.CAREER_TRANSITION,
+        "title": "EPF Transfer Process When Changing Jobs in India",
+        "content": (
+            "When switching jobs in India, transfer your EPF online via the EPFO member "
+            "portal using your UAN (Universal Account Number). Do NOT withdraw — withdrawal "
+            "before 5 years of service attracts tax and forfeits future compounding. The "
+            "transfer request is attested by your new employer online; processing typically "
+            "takes 2–8 weeks after employer approval. Check your UAN passbook to confirm "
+            "the transfer completed before your old employer closes your account."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.CAREER_TRANSITION,
+        "title": "Collecting Exit Documents Before Leaving a Job in India",
+        "content": (
+            "Before your last working day, collect: experience letter, relieving letter, "
+            "Form 16 (for the partial year if mid-year switch), last 3 salary slips, and "
+            "the Full-and-Final (F&F) settlement statement. Ensure ESOP or stock grant "
+            "documents are in hand if applicable. Resign just before an annual review "
+            "only after checking the gratuity eligibility threshold (5 years of service). "
+            "Corporate email and system access is usually revoked on exit day — collect "
+            "all documents before that."
+        ),
+    },
+
+    # ── POSTPARTUM_WELLNESS (India-specific) ─────────────────────────────────
+    {
+        "life_event_type": LifeEventType.POSTPARTUM_WELLNESS,
+        "title": "Birth Registration Process in India",
+        "content": (
+            "In India, birth must be registered within 21 days at the municipal corporation "
+            "or gram panchayat using the hospital-issued birth certificate. After 21 days, "
+            "a late fee and additional affidavit are required. Documents needed: hospital "
+            "discharge summary, parents' Aadhaar cards, and the filled registration form. "
+            "The official birth certificate (required for passports, school admissions, "
+            "and government schemes) is issued by the Registrar of Births and Deaths. "
+            "Most cities now offer online tracking and delivery."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.POSTPARTUM_WELLNESS,
+        "title": "Maternity Insurance Claims and Employer Benefits After Childbirth",
+        "content": (
+            "After childbirth, file a maternity insurance claim within the insurer's "
+            "stipulated window (usually 15–30 days of discharge). Required documents: "
+            "discharge summary, hospital bills, newborn birth record, and claim form. "
+            "Notify employer HR within the required timeline to activate maternity pay "
+            "and extend leave if needed. Under the Maternity Benefit Act 2017, eligible "
+            "female employees get 26 weeks paid leave; ESIC-covered employees can "
+            "claim maternity benefit directly from ESIC. Missing insurer notification "
+            "deadlines is the most common reason for claim rejection."
+        ),
+    },
+
+    # ── PREGNANCY_PREPARATION (India-specific) ───────────────────────────────
+    {
+        "life_event_type": LifeEventType.PREGNANCY_PREPARATION,
+        "title": "Insurance Maternity Waiting Periods and ESIC Benefits in India",
+        "content": (
+            "Private health insurance plans in India typically have a maternity waiting "
+            "period of 9–24 months — check your policy before planning. ESIC-covered "
+            "employees (earning under ₹21,000/month) are entitled to maternity benefit "
+            "paid directly by ESIC for 26 weeks without any waiting period. Register "
+            "on the ESIC portal and confirm eligibility early in pregnancy. State "
+            "government maternity schemes (e.g., Pradhan Mantri Matru Vandana Yojana) "
+            "provide ₹5,000 cash for the first live birth upon Aadhaar-linked registration "
+            "at an Anganwadi or health centre."
+        ),
+    },
+
+    # ── CHILD_SCHOOL_TRANSITION (India-specific) ─────────────────────────────
+    {
+        "life_event_type": LifeEventType.CHILD_SCHOOL_TRANSITION,
+        "title": "School Transfer Certificate and Admission Documents in India",
+        "content": (
+            "When moving to a new city with school-age children in India, collect the "
+            "Transfer Certificate (TC) from the current school before departure — "
+            "this is mandatory for admission to any new school. Also gather: birth "
+            "certificate, latest report card, Aadhaar, and address proof for the new "
+            "city. Government school admissions are managed through state education "
+            "portals; private schools have independent intake cycles usually 3–6 months "
+            "before the academic year. Mid-year transfers are possible but depend on "
+            "seat availability. Entrance tests or interviews may add 1–3 weeks."
+        ),
+    },
+
+    # ── WOMEN_DIVORCE_RECOVERY (India legal process) ─────────────────────────
+    {
+        "life_event_type": LifeEventType.WOMEN_DIVORCE_RECOVERY,
+        "title": "Family Court Divorce Process in India",
+        "content": (
+            "Divorce in India is filed in the Family Court under personal law (Hindu "
+            "Marriage Act, Special Marriage Act, etc.) or under Section 13B for mutual "
+            "consent. Mutual consent divorce requires a joint petition, a 6-month "
+            "cooling-off period (which courts may waive), and typically takes 6–18 months "
+            "depending on court backlog. Contested divorce can take several years. "
+            "Documents needed: marriage certificate, ID proofs of both parties, address "
+            "proof, children's birth certificates, bank statements, and any DV complaints "
+            "or FIRs. Legal aid services are available at District Legal Services "
+            "Authorities (DLSA) free of charge for eligible women."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.WOMEN_DIVORCE_RECOVERY,
+        "title": "Financial and Administrative Steps After Divorce in India",
+        "content": (
+            "After a divorce decree: update Aadhaar and PAN with maiden name if reverting "
+            "(takes 4–8 weeks via UIDAI and NSDL portals). Separate all joint bank accounts "
+            "and update nominees in EPF, insurance, and bank accounts immediately. Claim "
+            "stridhan and document any shared assets (property, investments) before "
+            "settlement is signed. Do not sign any agreement without independent legal "
+            "and financial advice. File income tax separately from the year of separation. "
+            "Open an independent credit card to start building your own credit history."
+        ),
+    },
+
+    # ── REPATRIATION (India-specific) ────────────────────────────────────────
+    {
+        "life_event_type": LifeEventType.REPATRIATION,
+        "title": "Repatriation of Body After Death Abroad — India Consular Process",
+        "content": (
+            "When an Indian national dies abroad, the family must contact the Indian "
+            "Embassy or Consulate in that country immediately. The consulate coordinates "
+            "the death certificate, No Objection Certificate (NOC) for repatriation, "
+            "and coordinates with local authorities. Required documents: deceased's "
+            "passport, local death certificate, hospital records, embalming certificate, "
+            "and relationship proof of next of kin. Airlines allow repatriation as cargo "
+            "with these clearances. The process typically takes 1–3 weeks internationally "
+            "and a few days for domestic inter-state transfers. Insurance policies with "
+            "repatriation cover (especially employer group policies) can fund this. "
+            "MEA's Madad portal (madad.gov.in) tracks consular assistance cases."
+        ),
+    },
+
+    # ── CAREER_TRANSITION — Senior Engineer / PM (Expert Map) ────────────────
+    {
+        "life_event_type": LifeEventType.CAREER_TRANSITION,
+        "title": "Senior Software Engineer Promotion — Evidence and Interview Prep",
+        "content": (
+            "To move to a senior engineering level, document quantified impact: latency "
+            "improvements, reliability gains, revenue impact, or team output multiplied. "
+            "Compile a portfolio showing systems you owned end-to-end, incidents you led, "
+            "and cross-team influence. Internal promotion cycles are typically tied to "
+            "annual or biannual review windows. External moves at senior level realistically "
+            "take 2–6 months and require strong system design and leadership narratives — "
+            "not just coding ability. References from tech leads and managers accelerate "
+            "the process."
+        ),
+    },
+    {
+        "life_event_type": LifeEventType.CAREER_TRANSITION,
+        "title": "Switching from Engineering to Product Management",
+        "content": (
+            "Transitioning from engineering to product management requires building a "
+            "portfolio of product-like work: features led end-to-end with documented "
+            "problem, hypothesis, and outcome metrics. Evidence of customer interaction "
+            "(interviews, surveys) and business trade-offs is essential. Internal "
+            "transitions typically take 3–12 months of shadow PM work before a formal "
+            "title change. External PM moves without a prior PM title require a strong "
+            "narrative of discovery and impact — not just technical work. Position yourself "
+            "as someone already doing PM work, not as a developer seeking a change."
+        ),
+    },
+
+    # ── EDUCATIONAL_ENROLLMENT — Graduate Research ────────────────────────────
+    {
+        "life_event_type": LifeEventType.EDUCATIONAL_ENROLLMENT,
+        "title": "Graduate Research Project — Approvals and Milestones",
+        "content": (
+            "Starting a graduate research project (MS or PhD) requires: an approved "
+            "research proposal with a defined scope, ethics or IRB approval if human "
+            "subjects are involved, data access agreements or lab access letters where "
+            "applicable, and a reference library setup (Zotero or Mendeley). Master's "
+            "projects typically run 6–12 months from proposal to defense; PhD research "
+            "spans multiple years with formal candidacy and thesis stages. "
+            "Common pitfall: choosing an overly broad topic that cannot be completed "
+            "within the available time — narrow scope aggressively from the start."
+        ),
+    },
+
+    # ── VISA_APPLICATION — H-1B / Work Visa Sponsorship ──────────────────────
+    {
+        "life_event_type": LifeEventType.VISA_APPLICATION,
+        "title": "Work Visa Sponsorship Process (H-1B and Similar)",
+        "content": (
+            "Work visa sponsorship (e.g., US H-1B) involves: employer files a Labor "
+            "Condition Application (LCA) with the Dept of Labor, then files a petition "
+            "with USCIS. Standard USCIS processing can take 8–12 months; premium "
+            "processing (additional fee) delivers a decision in about 15 business days. "
+            "Applicant then attends a consular interview for visa stamping. Key mistake: "
+            "assuming any employer can sponsor — they must be a registered sponsor with "
+            "legal capacity. Track petition validity dates carefully and do not change "
+            "employers without understanding portability rules. Total timeline from offer "
+            "to start date commonly spans many months."
+        ),
+    },
+
+    # ── BUSINESS_STARTUP — VC / Fundraising ──────────────────────────────────
+    {
+        "life_event_type": LifeEventType.BUSINESS_STARTUP,
+        "title": "VC Pitch Deck and Fundraising Data Room",
+        "content": (
+            "For a venture capital raise, the pitch deck must clearly cover: problem, "
+            "solution, market size, traction metrics (MRR, growth rate, CAC/LTV), "
+            "business model, team, and financials. Back it with a data room containing "
+            "incorporation documents, cap table, IP assignments, and key contracts. "
+            "Early-stage fundraises commonly take 3–6 months from first meetings to "
+            "money in the bank. The most common mistake is a deck strong on technology "
+            "but weak on market size, go-to-market, and consistent metrics across deck "
+            "and data room. Approach investors matched to your stage — pre-revenue "
+            "startups should target angels and pre-seed funds, not Series A investors."
+        ),
+    },
+
+    # ── MEDICAL_EMERGENCY — Surgical Planning ────────────────────────────────
+    {
+        "life_event_type": LifeEventType.MEDICAL_EMERGENCY,
+        "title": "Elective Surgery Planning and Insurance Pre-Authorisation",
+        "content": (
+            "For planned surgeries in India: verify that both the hospital and surgeon "
+            "are in-network for your insurance policy. Request pre-authorisation from "
+            "your insurer/TPA at least 2 weeks before the procedure — submit referral "
+            "letter, diagnosis, and proposed treatment plan. Elective surgical planning "
+            "involves consultations, investigations (MRI, blood tests), and scheduling "
+            "that together can take weeks to months. Critical mistakes: no updated "
+            "medication and allergy list for the anaesthesiologist, and no discharge "
+            "plan (follow-up appointments, home-care requirements) arranged in advance."
+        ),
+    },
+
+    # ── HEALTH_INSURANCE — Chronic Condition Management ──────────────────────
+    {
+        "life_event_type": LifeEventType.HEALTH_INSURANCE,
+        "title": "Managing Chronic Conditions — Records and Portability in India",
+        "content": (
+            "For chronic conditions (diabetes, hypertension, cardiac), maintain a "
+            "consolidated record of all lab results, prescriptions, and imaging — "
+            "fragmented records across multiple providers are the most common complaint "
+            "during referrals. Health insurance policies can exclude pre-existing "
+            "conditions for 2–4 years; after that, coverage typically activates. "
+            "Port your policy before renewal (within the portability window) if changing "
+            "insurer — portability preserves your accrued waiting periods. Schedule "
+            "monthly or quarterly specialist visits and annual comprehensive panels "
+            "proactively; irregular follow-up and medication non-adherence are the "
+            "leading causes of hospitalisation in chronic cases."
         ),
     },
 ]

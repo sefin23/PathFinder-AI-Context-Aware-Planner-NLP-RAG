@@ -18,6 +18,7 @@ import {
   Calendar,
   Compass,
 } from 'lucide-react'
+import { logoutUser } from '../api/backend'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'New Event', icon: Map,             color: '#60a5fa' }, // Vibrant Sky Blue
@@ -31,10 +32,24 @@ const BOTTOM_ITEMS = [
   { id: 'settings', label: 'Settings', icon: '⚙️', color: '#f2c94c' }, // Gold
 ]
 
-export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
+export default function Sidebar({ user, activePage = 'dashboard', onNavigate }) {
   const [isHovered, setIsHovered] = useState(false)
 
+  const userName = user?.name || 'Pathfinder User'
+  const userInitials = userName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
   const sidebarWidth = isHovered ? 240 : 60
+
+  const handleLogout = async () => {
+    try {
+      // 1. Instantly log out locally for immediate UI response
+      window.dispatchEvent(new CustomEvent('pathfinder-signout'))
+      
+      // 2. Clear backend session in the background
+      await logoutUser().catch(console.error)
+    } catch (err) {
+      console.error("Logout failed:", err)
+    }
+  }
 
   return (
     <motion.aside
@@ -237,18 +252,38 @@ export default function Sidebar({ activePage = 'dashboard', onNavigate }) {
           >
             <div style={{ 
               width: 28, height: 28, borderRadius: '50%', 
-              background: 'linear-gradient(135deg, var(--sage), var(--forest-deep))',
+              background: 'linear-gradient(135deg, rgba(96,165,250,0.35), rgba(30,58,138,0.7))',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 800, color: 'white',
-              border: '1px solid rgba(255,255,255,0.1)'
+              fontSize: 11, fontWeight: 800, color: '#93c5fd',
+              border: '1px solid rgba(96,165,250,0.25)',
+              fontFamily: 'Playfair Display, serif'
             }}>
-              S
+              {userInitials}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-               <p style={{ fontSize: 13, fontWeight: 600, color: 'white', margin: 0 }}>Sefin Jose</p>
+               <p style={{ fontSize: 13, fontWeight: 600, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                 {userName}
+               </p>
     
             </div>
-            <LogOut size={14} color="rgba(255,255,255,0.2)" style={{ cursor: 'pointer' }} />
+            <motion.button
+              whileHover={{ scale: 1.1, color: 'white' }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleLogout}
+              style={{ 
+                background: 'transparent',
+                border: 'none',
+                padding: 4,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--amber)',
+                opacity: 0.8
+              }}
+            >
+              <LogOut size={18} />
+            </motion.button>
           </motion.div>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center' }}>

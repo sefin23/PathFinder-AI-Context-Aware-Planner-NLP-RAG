@@ -45,13 +45,18 @@ export default function VaultPage() {
         })
 
         const totalNeeded = Math.max(uniqueReqs.size, 5)
-        // A document is considered "applied" if it's linked to a task (plans_count > 0)
         const linkedCount = vDocs.filter(d => d.plans_count > 0).length
         const percent = Math.min(Math.round((linkedCount / totalNeeded) * 100), 100)
+        const totalSize = vDocs.reduce((acc, d) => acc + (d.size_bytes || 0), 0)
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1)
+        const activeLinks = vDocs.reduce((acc, d) => acc + (d.plans_count || 0), 0)
         
-        setReadiness({ percent, total: totalNeeded, linked: linkedCount })
+        setReadiness({ percent, total: totalNeeded, linked: linkedCount, totalSizeMB, activeLinks })
       } else {
-        setReadiness({ percent: 0, total: 3, linked: 0 }) // Default 3 if no plans detected yet
+        const totalSize = vDocs.reduce((acc, d) => acc + (d.size_bytes || 0), 0)
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1)
+        const activeLinks = vDocs.reduce((acc, d) => acc + (d.plans_count || 0), 0)
+        setReadiness({ percent: 0, total: 3, linked: 0, totalSizeMB, activeLinks })
       }
 
     } catch (err) {
@@ -173,7 +178,7 @@ export default function VaultPage() {
 
             {loading ? (
                 <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
-                    <p className="font-mono" style={{ fontSize: 12 }}>ENCRYPTED ACCESS IN PROGRESS...</p>
+                    <p className="font-mono" style={{ fontSize: 12 }}>PREPARING YOUR SECURE ARCHIVE...</p>
                 </div>
             ) : filteredDocs.length === 0 ? (
                 <div style={{ 
@@ -260,8 +265,8 @@ export default function VaultPage() {
                         </div>
 
                         {[
-                            { label: 'Storage Used', value: '4.2 MB' },
-                            { label: 'Active Plan Links', value: `${docs.reduce((acc, d) => acc + (d.plans_count || 0), 0)} links` }
+                            { label: 'Storage Used', value: `${readiness.totalSizeMB || '0.0'} MB` },
+                            { label: 'Active Plan Links', value: `${readiness.activeLinks || 0} links` }
                         ].map((stat, i) => (
                             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '0 4px' }}>
                                 <span style={{ color: 'var(--muted)' }}>{stat.label}</span>

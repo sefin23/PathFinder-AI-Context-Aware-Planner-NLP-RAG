@@ -22,6 +22,7 @@ class TaskResponse(BaseModel):
     title: str
     description: Optional[str]
     phase_title: Optional[str] = None
+    phase_category: Optional[str] = None
     status: TaskStatus
     priority: int
     due_date: Optional[datetime]

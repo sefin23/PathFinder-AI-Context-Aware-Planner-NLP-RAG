@@ -372,7 +372,7 @@ export default function InsightsPage() {
     : 0
 
   return (
-    <div style={{ padding: '40px 40px 80px', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+    <div style={{ padding: '40px 60px 80px', maxWidth: 1600, margin: '0 auto', width: '100%' }}>
 
       {/* Page label */}
       <motion.p

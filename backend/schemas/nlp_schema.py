@@ -143,6 +143,14 @@ class LifeEventClassification(BaseModel):
         le=1.0,
         description="Model's self-assessed confidence in the classification (0–1).",
     )
+    is_highly_detailed: bool = Field(
+        False,
+        description="TRUE only if the prompt contains industry, stage, timeline, and specific goals."
+    )
+    missing_strategic_details: list[str] = Field(
+        default_factory=list,
+        description="Specific pieces of information required for a high-quality roadmap."
+    )
 
     @field_validator("life_event_types")
     @classmethod

@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git log --all --pretty=format:\"%h %ad %s\" --date=short -- frontend-v2/src/pages/SavedPlans.jsx)"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}

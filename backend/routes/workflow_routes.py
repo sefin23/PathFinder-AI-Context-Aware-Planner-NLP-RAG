@@ -79,7 +79,8 @@ def propose_life_event_workflow(
             location=body.location,
             timeline=body.timeline,
             top_k=body.top_k,
-            start_date=body.start_date
+            start_date=body.start_date,
+            original_description=body.original_description,
         )
     except ValueError as exc:
         # Empty KB or no entries for requested types

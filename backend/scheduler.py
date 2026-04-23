@@ -1,33 +1,15 @@
 """
 APScheduler configuration for Pathfinder AI.
 
-Job: run_daily_reminders fires once per day at 08:00 in UTC.
-
-Why UTC-fixed cron instead of per-user local 8 AM?
-────────────────────────────────────────────────────
-Running one job per user's timezone would require dynamic job registration
-and creates scheduler overhead as users grow.  The correct pattern for
-multi-timezone apps is:
-
-  • Schedule ONE job at a fixed UTC time (08:00 UTC here).
-  • Inside the job, check whether 08:00 local-time has passed for each user.
-  • Skip users whose 8 AM has not yet come (they'll be caught by the next
-    execution or a finer-grained schedule).
-
-This gives us a simple, robust scheduler with zero per-user job churn.
-The reminder_service handles the per-user timezone logic.
-
-Upgrade path:
-  To achieve exact 8 AM local for every user, change the trigger to
-  run every hour and add a "local_hour == 8" gate in reminder_service.
-  This file stays untouched.
+New Email System Redesign:
+1. Morning Briefs: Fires every 30 minutes, checks if user local time is 7:30 AM.
+2. Task Nudges: Checks once per day at midnight UTC for stale tasks.
 """
 import logging
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from backend.services.reminder_service import run_daily_reminders
+from backend.services.reminder_service import run_utc_morning_brief_check, run_nudge_check
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +22,23 @@ scheduler = BackgroundScheduler(
 # ---------------------------------------------------------------------------
 # Job registration
 # ---------------------------------------------------------------------------
-# Fires at 08:00 UTC daily.  reminder_service checks each user's local hour.
+
+# 1. Morning Brief (Daily at 7:30 AM local time, checked every 30 minutes)
+# Fires at minute 0 and 30 for all timezones.
 scheduler.add_job(
-    run_daily_reminders,
-    trigger=CronTrigger(hour=8, minute=0, timezone="UTC"),
-    id="daily_reminder_digest",
-    name="Daily Reminder Digest",
+    run_utc_morning_brief_check,
+    trigger=CronTrigger(minute='0,30', timezone="UTC"),
+    id="daily_morning_brief",
+    name="Morning Brief Checker",
+    replace_existing=True,
+)
+
+# 2. Task Nudge (Daily at midnight UTC to check for stale tasks)
+scheduler.add_job(
+    run_nudge_check,
+    trigger=CronTrigger(hour=0, minute=0, timezone="UTC"),
+    id="stale_task_nudge",
+    name="Stale Task Nudge Checker",
     replace_existing=True,
 )
 
@@ -54,7 +47,7 @@ def start_scheduler() -> None:
     """Start the background scheduler. Called from FastAPI lifespan startup."""
     if not scheduler.running:
         scheduler.start()
-        log.info("APScheduler started. Jobs: %s", [j.id for j in scheduler.get_jobs()])
+        log.info("APScheduler started. Active Jobs: %s", [j.id for j in scheduler.get_jobs()])
 
 
 def stop_scheduler() -> None:

@@ -1,5 +1,9 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import List, Optional
+import json
+import logging
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -16,7 +20,7 @@ from backend.schemas.task_schema import (
     TaskStatusUpdate,
     TaskUpdate,
 )
-from backend.utils.timezone_utils import days_until_due, now_in_tz
+from backend.utils.timezone_utils import days_until_due
 
 router = APIRouter()
 
@@ -232,6 +236,111 @@ def update_task(task_id: int, update: TaskUpdate, db: Session = Depends(get_db))
     db.commit()
     db.refresh(task)
     return task
+
+
+@router.get("/{task_id}/guide")
+def get_task_guide(task_id: int, db: Session = Depends(get_db)):
+    """
+    Return the TaskGuide for a task, with prefill fields resolved against
+    the user's vault and profile. Used by GuidePanel.jsx.
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    guide_key = task.task_type or task.guide_type
+    if not guide_key:
+        return {"has_guide": False}
+
+    from backend.models.task_guide_model import TaskGuide
+    guide = db.query(TaskGuide).filter(TaskGuide.task_type == guide_key).first()
+    if not guide:
+        return {"has_guide": False}
+
+    # Build a lookup of doc_type → doc name from the user's vault
+    vault_docs: dict[str, str] = {}
+    user = task.life_event.user if task.life_event else None
+    if user:
+        for doc in user.vault_documents:
+            if not doc.deleted_at:
+                vault_docs[doc.doc_type] = doc.name
+
+    # Parse steps
+    try:
+        steps = json.loads(guide.steps) if guide.steps else []
+    except Exception:
+        log.warning("Corrupt steps JSON for task_guide id=%s", guide.id)
+        steps = []
+
+    # Resolve prefill_fields against vault + profile
+    prefilled = []
+    prefill_map: dict[str, str] = {}  # source_key → resolved value (for step injection)
+    try:
+        raw_prefills = json.loads(guide.prefill_fields) if guide.prefill_fields else []
+        for pf in raw_prefills:
+            source: str = pf.get("source", "")
+            found = False
+            value = None
+            if source.startswith("vault."):
+                key = source[6:]
+                # exact match first, then substring
+                if key in vault_docs:
+                    found, value = True, vault_docs[key]
+                else:
+                    for k, v in vault_docs.items():
+                        if key in k or k in key:
+                            found, value = True, v
+                            break
+            elif source.startswith("profile.") and user:
+                attr = source[8:]
+                val = getattr(user, attr, None)
+                if val:
+                    found, value = True, str(val)
+            if found and value:
+                prefill_map[source] = value
+            prefilled.append({
+                "label": pf.get("label", ""),
+                "found": found,
+                "value": value,
+                "source_label": source,
+            })
+    except Exception:
+        log.warning("Corrupt prefill_fields JSON for task_guide id=%s", guide.id)
+
+    # Inject prefill values into step text — steps may contain {source.key} placeholders
+    if prefill_map:
+        injected_steps = []
+        for step in steps:
+            if isinstance(step, str):
+                for placeholder, val in prefill_map.items():
+                    step = step.replace(f"{{{placeholder}}}", val)
+            injected_steps.append(step)
+        steps = injected_steps
+
+    # Resolve required_doc_types against vault
+    required_docs = []
+    try:
+        doc_types = json.loads(guide.required_doc_types) if guide.required_doc_types else []
+        for dt in doc_types:
+            required_docs.append({
+                "name": dt.replace("_", " ").title(),
+                "has": dt in vault_docs,
+            })
+    except Exception:
+        log.warning("Corrupt required_doc_types JSON for task_guide id=%s", guide.id)
+
+    return {
+        "has_guide": True,
+        "title": guide.title,
+        "url": guide.url,
+        "estimated_mins": guide.estimated_mins,
+        "steps": steps,
+        "prefilled": prefilled,
+        "prefill_map": prefill_map,
+        "required_docs": required_docs,
+        "expected_result": guide.expected_result,
+        "what_to_save": guide.what_to_save,
+    }
 
 
 @router.delete("/{task_id}", status_code=204)

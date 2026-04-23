@@ -28,19 +28,20 @@ _SYSTEM_PROMPT = f"""\
 You are "The Pathfinder," an elite life-event architect and master strategist. Your tone is expert, empathetic, and proactive.
 
 Your ONLY job is to analyse the user's text and return a valid JSON object with exactly these keys:
-- life_event_types: array of one or more strings from the allowed list below
-- display_title: string — A highly specific, human-friendly title reflecting exactly what the user is doing (e.g., 'Passport Renewal in India', 'Relocating to Dubai', 'Starting a Bakery'). DO NOT use generic category names like 'Legal and Identity Transition' or 'Moving'. Name the actual activity.
-- location: string — city, state, or country from the text, or null if not mentioned
-- timeline: string — time-frame from the text, or null if not mentioned
-- enriched_narrative: string — Summarise the user's event and their answers into one or two natural sentences. Write it as a clean factual summary, no questions, no 'regarding', no 'you noted'. Just what they told you, compressed naturally. (e.g., 'Renewing an Indian passport, no immediate urgency.' or 'Launching a SaaS business, currently at idea stage.'). The location must become a descriptor, not a separate data point (e.g. 'Canadian visa', not 'visa, country: Canada').
-- confidence: number between 0.0 and 1.0. IMPORTANT: Your confidence score must reflect ONLY the clarity of the event identity (e.g., 'Passport', 'Visa'). Do NOT lower confidence just because the event is 'not urgent', 'in the future', or 'exploratory'. Urgency and timeframe modifications belong EXCLUSIVELY in the `timeline` parameter. If you detect a core event, the confidence must be > 0.9.
+- life_event_types: array of strings from: {_ALLOWED_TYPES}. IMPORTANT: If the text contains MULTIPLE major events (e.g., career change AND relocating), you MUST include ALL relevant types. Never drop a primary goal just because a secondary goal was added.
+- display_title: string — A specific, human-friendly title (e.g., 'Launching a Tech Startup in London').
+- location: string — city/state/country, or null.
+- timeline: string — time-frame, or null.
+- enriched_narrative: string — A natural 2-sentence summary of their situation. MUST be written directly to the user in the second person (e.g., "You are planning to...", "Your goal is to..."). NEVER use third person ("The individual...", "They...").
+- confidence: number (0.0 to 1.0).
+- is_highly_detailed: boolean — Set to TRUE only if the user has provided a VERY detailed brief (including industry, current stage, budget, and specific goals). Set to FALSE for short prompts like 'Starting a business' or 'Moving to Dubai'.
+- missing_strategic_details: array of strings — Identify 3-4 specific pieces of information we still need to build a perfect roadmap.
 
 Rules:
-- TYPO CORRECTION: Automatically correct spellings like 'comapny' to 'company', etc.
-- LOCATION: If a major country or city is mentioned, extract it as the location.
-- DO NOT use generic titles. Give it character.
+- SOCRATIC DEFAULT: Always assume the prompt is NOT highly detailed unless it is massive and specific (100+ words).
+- CONFIDENCE: If the user provides a clear goal (even if simple like 'Learning Python'), provide a confidence score of 0.85+ if it fits a known category. Do not penalize confidence just for simplicity if the intent is clear.
 - Pick only from the allowed life_event_types: {_ALLOWED_TYPES}
-- Return ONLY the JSON object — no markdown, no explanation.
+- Return ONLY JSON.
 """
 
 
@@ -97,14 +98,33 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
 
         conf = float(data.get("confidence", 0.0))
         types = [LifeEventType(t) for t in data.get("life_event_types", ["OTHER"])] # Default to OTHER if not present
-        
+
+        # Sanitize display_title: LLMs sometimes return generic placeholders
+        _GENERIC_TITLES = {"new event", "event", "life event", "personal event", "untitled", "n/a", ""}
+        raw_title = (data.get("display_title") or "").strip()
+        if raw_title.lower() in _GENERIC_TITLES:
+            # Derive a meaningful title from event types instead
+            primary = types[0].value.replace("_", " ").title() if types else "Personal Planning Journey"
+            raw_location = (data.get("location") or "").strip()
+            if raw_location and raw_location.lower() not in ("null", "none", "n/a"):
+                raw_title = f"{primary} in {raw_location}"
+            else:
+                raw_title = primary
+
+        # Sanitize location: LLMs often return the string "null" instead of JSON null
+        raw_location = data.get("location")
+        if isinstance(raw_location, str) and raw_location.strip().lower() in ("null", "none", "n/a", ""):
+            raw_location = None
+
         classification = LifeEventClassification(
             life_event_types=types,
-            display_title=data.get("display_title", "New Event"),
-            location=data.get("location"),
+            display_title=raw_title,
+            location=raw_location,
             timeline=data.get("timeline"),
             enriched_narrative=data.get("enriched_narrative", text),
             confidence=conf,
+            is_highly_detailed=bool(data.get("is_highly_detailed", False)),
+            missing_strategic_details=data.get("missing_strategic_details", []),
         )
 
         # ── Layer 3.5: Correction Layer (Sniffer Fallback) ────────────────
@@ -123,6 +143,15 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
                 "Singapore": ["SINGAPORE", "SGP", "SINGA"],
                 "Berlin": ["BERLIN", "BRLN"],
                 "Paris": ["PARIS", "PRIS"],
+                "Italy": ["ITALY", "ROME", "MILAN", "MILANO", "FLORENCE", "VENICE", "ITALIAN"],
+                "Spain": ["SPAIN", "MADRID", "BARCELONA"],
+                "Greece": ["GREECE", "ATHENS"],
+                "Portugal": ["PORTUGAL", "LISBON"],
+                "Japan": ["JAPAN", "TOKYO", "OSAKA"],
+                "United Kingdom": ["UK", "BRITAIN", "ENGLAND", "SCOTLAND"],
+                "India": ["INDIA", "DELHI", "MUMBAI", "BANGALORE", "HYDERABAD"],
+                "United States": ["USA", "UNITED STATES", "AMERICA"],
+                "Australia": ["AUSTRALIA", "AUS"],
             }
             if not classification.location:
                 for city, variants in LOCATIONS.items():
@@ -161,8 +190,19 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
                 boosted = True
                 logger.info("Type repaired & boosted: BUSINESS_STARTUP")
 
-        # ── Layer 4: Clarification Fallback ────────────────────────────────
-        if not skip_clarification and (classification.confidence < 0.6 or not classification.location):
+            if any(w in upper_text for w in ["LEARN", "STUDY", "COURSE", "DEGREE", "PYTHON", "CODING", "PROJECT", "PORTFOLIO", "UPKILL", "SKILL"]):
+                if LifeEventType.CAREER_UPSKILLING not in classification.life_event_types:
+                    classification.life_event_types.append(LifeEventType.CAREER_UPSKILLING)
+                classification.confidence = max(classification.confidence, 0.90)
+                boosted = True
+                logger.info("Type repaired & boosted: CAREER_UPSKILLING")
+
+        # ── Layer 4: Clarification Fallback (Socratic Gate) ────────────────
+        # TRIGGER if: 
+        # 1. AI is not confident
+        # 2. Location is missing
+        # 3. Prompt is not highly detailed (Socratic-First Requirement)
+        if not skip_clarification and (classification.confidence < 0.6 or not classification.location or not classification.is_highly_detailed):
             logger.info("Triggering clarification fallback. Confidence: %s, Location: %s", classification.confidence, classification.location)
             return generate_clarification_questions(
                 db=db, # Added missing DB session
@@ -180,43 +220,127 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
 
     # ── ADVANCED EMERGENCY SNIFFER ──────────────────────────────────
     # Runs when the LLMs are fully offline/failing (Rate limits, API downtime).
-    # We now collect ALL matching types and extract major locations to prevent "Confidence: 0".
+    # Each rule: (keywords_all_required, keywords_any_required, LifeEventType)
+    # A rule fires when ALL of keywords_all are present AND at least one of keywords_any is present.
+    # keywords_any=[] means only keywords_all is checked.
     upper_text = text.upper()
     detected_types = []
     location_guess = None
-    
-    # Identify Types — split into HIGH-specificity (unambiguous event name) vs LOW-specificity (general words)
-    high_specificity_match = False
 
-    if any(w in upper_text for w in ["VISA", "PASSPORT", "GREEN CARD", "GREENCARD", "IMMIG", "CITIZENSHIP", "WORK PERMIT", "OCI", "PIO"]):
-        detected_types.append(LifeEventType.LEGAL_AND_IDENTITY)
-        high_specificity_match = True
-    if any(w in upper_text for w in ["STARTUP", "INCORPORAT", "REGISTER.*COMPANY", "FOUND.*COMPANY", "LAUNCH.*BUSINESS", "START.*BUSINESS"]):
-        detected_types.append(LifeEventType.BUSINESS_STARTUP)
-        high_specificity_match = True
-    if any(w in upper_text for w in ["MARRIAGE", "WEDDING", "MARRY", "MARRIED", "ENGAGEMENT"]):
-        detected_types.append(LifeEventType.MARRIAGE_PLANNING)
-        high_specificity_match = True
-    if any(w in upper_text for w in ["PREGNANT", "PREGNANCY", "MATERNITY", "NEWBORN", "BABY SHOWER"]):
-        detected_types.append(LifeEventType.PREGNANCY_PREPARATION)
-        high_specificity_match = True
-    if any(w in upper_text for w in ["RELOCATION", "RELOCAT", "MOVING TO", "SHIFTED TO", "MIGRAT"]):
-        detected_types.append(LifeEventType.RELOCATION)
-        high_specificity_match = True
+    _SNIFFER_RULES: list[tuple[list[str], list[str], LifeEventType]] = [
+        # High-specificity — unambiguous signals, checked first
+        (["PASSPORT"], [], LifeEventType.LEGAL_AND_IDENTITY),
+        (["VISA"], [], LifeEventType.VISA_APPLICATION),
+        (["GREEN CARD"], [], LifeEventType.VISA_APPLICATION),
+        (["WORK PERMIT"], [], LifeEventType.VISA_APPLICATION),
+        (["CITIZENSHIP"], [], LifeEventType.LEGAL_AND_IDENTITY),
+        (["AADHAAR"], [], LifeEventType.LEGAL_AND_IDENTITY),
+        (["AADHAR"], [], LifeEventType.LEGAL_AND_IDENTITY),
+        (["MARRIAGE"], [], LifeEventType.MARRIAGE_PLANNING),
+        (["WEDDING"], [], LifeEventType.MARRIAGE_PLANNING),
+        (["MARRY"], [], LifeEventType.MARRIAGE_PLANNING),
+        (["DIVORCE"], [], LifeEventType.WOMEN_DIVORCE_RECOVERY),
+        (["PREGNANT"], [], LifeEventType.PREGNANCY_PREPARATION),
+        (["PREGNANCY"], [], LifeEventType.PREGNANCY_PREPARATION),
+        (["DUE DATE"], [], LifeEventType.PREGNANCY_PREPARATION),
+        (["TRIMESTER"], [], LifeEventType.PREGNANCY_PREPARATION),
+        (["MATERNITY LEAVE"], [], LifeEventType.PARENTAL_LEAVE),
+        (["PATERNITY LEAVE"], [], LifeEventType.PARENTAL_LEAVE),
+        (["POSTPARTUM"], [], LifeEventType.POSTPARTUM_WELLNESS),
+        (["NEWBORN"], [], LifeEventType.POSTPARTUM_WELLNESS),
+        (["BIRTH CERTIFICATE"], [], LifeEventType.POSTPARTUM_WELLNESS),
+        (["RELOCATION"], [], LifeEventType.RELOCATION),
+        (["RELOCAT"], [], LifeEventType.RELOCATION),
+        (["MOVING TO"], [], LifeEventType.RELOCATION),
+        (["MIGRAT"], [], LifeEventType.RELOCATION),
+        (["STARTUP"], [], LifeEventType.BUSINESS_STARTUP),
+        (["INCORPORAT"], [], LifeEventType.BUSINESS_STARTUP),
+        (["FREELANC"], [], LifeEventType.FREELANCE_SETUP),
+        (["NRI"], [], LifeEventType.NRI_RETURN_TO_INDIA),
+        (["RETURN TO INDIA"], [], LifeEventType.NRI_RETURN_TO_INDIA),
+        (["REPATRIAT"], [], LifeEventType.REPATRIATION),
+        (["DEATH ABROAD"], [], LifeEventType.REPATRIATION),
+        (["STUDY ABROAD"], [], LifeEventType.STUDY_ABROAD),
+        (["MASTERS"], [], LifeEventType.GRADUATE_STUDIES),
+        (["PHD"], [], LifeEventType.GRADUATE_STUDIES),
+        (["POSTGRAD"], [], LifeEventType.GRADUATE_STUDIES),
+        (["RETIREMENT"], [], LifeEventType.RETIREMENT_PLANNING),
+        (["RETIRE"], [], LifeEventType.RETIREMENT_PLANNING),
+        (["ESTATE PLAN"], [], LifeEventType.ESTATE_PLANNING),
+        (["INHERITANCE"], [], LifeEventType.PROPERTY_INHERITANCE),
+        (["INHERIT"], [], LifeEventType.PROPERTY_INHERITANCE),
+        (["ADOPTION"], [], LifeEventType.ADOPTION_PROCESS),
+        (["CARA"], [], LifeEventType.ADOPTION_PROCESS),
+        (["GRIEF"], [], LifeEventType.GRIEF_SUPPORT),
+        (["BEREAVEMENT"], [], LifeEventType.GRIEF_SUPPORT),
+        (["HEALTH INSURANCE"], [], LifeEventType.HEALTH_INSURANCE),
+        (["MEDICLAIM"], [], LifeEventType.HEALTH_INSURANCE),
+        (["MEDICAL EMERGENCY"], [], LifeEventType.MEDICAL_EMERGENCY),
+        (["HOSPITALIZ"], [], LifeEventType.MEDICAL_EMERGENCY),
+        (["DEBT"], [], LifeEventType.DEBT_MANAGEMENT),
+        (["POLICE VERIFICATION"], [], LifeEventType.RENTAL_VERIFICATION),
+        (["RENT AGREEMENT"], [], LifeEventType.RENTAL_VERIFICATION),
+        (["HOME LOAN"], [], LifeEventType.HOME_PURCHASE),
+        (["UDYAM"], [], LifeEventType.WOMEN_ENTREPRENEURSHIP),
+        (["VOLUNTEER"], [], LifeEventType.VOLUNTEER_WORK),
+        (["PET ADOPT"], [], LifeEventType.PET_ADOPTION),
+        (["ELDER"], ["CARE", "PARENT", "MOTHER", "FATHER"], LifeEventType.ELDERCARE_MANAGEMENT),
+        (["OLD AGE"], ["PARENT", "CARE"], LifeEventType.ELDERCARE_MANAGEMENT),
+        (["EDUCATION LOAN"], [], LifeEventType.EDUCATION_FINANCING),
+        (["SCHOLARSHIP"], [], LifeEventType.EDUCATION_FINANCING),
+        (["BURNOUT"], [], LifeEventType.WORKPLACE_WELLNESS),
+        (["WORKPLACE"], ["WELLNESS", "MENTAL HEALTH", "STRESS"], LifeEventType.WORKPLACE_WELLNESS),
+        (["MENTAL HEALTH"], [], LifeEventType.WELLNESS_MANAGEMENT),
+        (["CHRONIC"], ["CONDITION", "ILLNESS", "DISEASE"], LifeEventType.WELLNESS_MANAGEMENT),
+        (["DISABILITY"], [], LifeEventType.HEALTH_AND_DISABILITY),
+        (["PERSONAL GROWTH"], [], LifeEventType.PERSONAL_GROWTH),
+        (["SELF IMPROVEMENT"], [], LifeEventType.PERSONAL_GROWTH),
+        # Child school — must have BOTH school signal AND child signal to avoid false matches
+        (["SCHOOL"], ["CHILD", "KID", "SON", "DAUGHTER"], LifeEventType.CHILD_SCHOOL_TRANSITION),
+        (["TRANSFER CERTIFICATE"], [], LifeEventType.CHILD_SCHOOL_TRANSITION),
+        (["ADMISSION"], ["CHILD", "KID", "SON", "DAUGHTER", "SCHOOL"], LifeEventType.CHILD_SCHOOL_TRANSITION),
+        # Lower-specificity — checked after high-specificity
+        (["PYTHON"], [], LifeEventType.CAREER_UPSKILLING),
+        (["CODING"], [], LifeEventType.CAREER_UPSKILLING),
+        (["PROGRAMMING"], [], LifeEventType.CAREER_UPSKILLING),
+        (["UPSKILL"], [], LifeEventType.CAREER_UPSKILLING),
+        (["LEARN"], ["SKILL", "COURSE", "CERTIF", "PYTHON", "CODING"], LifeEventType.CAREER_UPSKILLING),
+        (["CAREER"], ["CHANGE", "SWITCH", "TRANSITION", "PIVOT", "CHANGE"], LifeEventType.CAREER_TRANSITION),
+        (["QUIT"], ["JOB", "ROLE", "COMPANY"], LifeEventType.CAREER_TRANSITION),
+        (["RESIGN"], [], LifeEventType.CAREER_TRANSITION),
+        (["JOB"], ["OFFER", "JOINING", "ONBOARD", "START DATE", "NEW JOB"], LifeEventType.JOB_ONBOARDING),
+        (["ONBOARDING"], [], LifeEventType.JOB_ONBOARDING),
+        (["JOINING DATE"], [], LifeEventType.JOB_ONBOARDING),
+        (["START"], ["BUSINESS", "COMPANY", "VENTURE"], LifeEventType.BUSINESS_STARTUP),
+        (["LAUNCH"], ["BUSINESS", "COMPANY", "STARTUP"], LifeEventType.BUSINESS_STARTUP),
+        (["WOMEN"], ["BUSINESS", "ENTREPRENEUR", "STARTUP"], LifeEventType.WOMEN_ENTREPRENEURSHIP),
+        (["BUY"], ["HOUSE", "HOME", "FLAT", "APARTMENT", "PROPERTY"], LifeEventType.HOME_PURCHASE),
+        (["PURCHASE"], ["HOUSE", "HOME", "FLAT", "APARTMENT", "PROPERTY"], LifeEventType.HOME_PURCHASE),
+        (["BUY"], ["CAR", "BIKE", "VEHICLE", "SCOOTER", "MOTORCYCLE"], LifeEventType.VEHICLE_PURCHASE),
+        (["PURCHASE"], ["CAR", "BIKE", "VEHICLE", "SCOOTER"], LifeEventType.VEHICLE_PURCHASE),
+        (["MOVE"], ["CITY", "COUNTRY", "ABROAD", "NEW PLACE", "SHIFTING"], LifeEventType.RELOCATION),
+        (["BABY"], [], LifeEventType.POSTPARTUM_WELLNESS),
+        (["LEGAL"], ["CITIZEN", "IDENTITY", "DOCUMENT"], LifeEventType.LEGAL_AND_IDENTITY),
+        (["INVEST"], ["PLAN", "PORTFOLIO", "ASSET", "WEALTH"], LifeEventType.MONEY_AND_ASSETS),
+        (["LOAN"], ["MANAGE", "REPAY", "OVERDUE", "DEFAULT", "CREDIT"], LifeEventType.DEBT_MANAGEMENT),
+        (["COLLEGE"], ["ADMISSION", "ENROL", "COUNSEL"], LifeEventType.EDUCATIONAL_ENROLLMENT),
+        (["UNIVERSITY"], ["ADMISSION", "ENROL", "APPLY"], LifeEventType.EDUCATIONAL_ENROLLMENT),
+        (["STUDY"], ["ABROAD", "OVERSEAS", "UK", "USA", "CANADA", "AUSTRALIA"], LifeEventType.STUDY_ABROAD),
+        (["ADOPT"], ["DOG", "CAT", "PET", "ANIMAL"], LifeEventType.PET_ADOPTION),
+        (["ADOPT"], ["CHILD", "BABY", "KID"], LifeEventType.ADOPTION_PROCESS),
+        (["RENT"], ["LANDLORD", "TENANT", "POLICE", "VERIFY"], LifeEventType.RENTAL_VERIFICATION),
+        (["FAMILY"], ["RELOCAT", "MOVING", "MOVE", "SHIFT"], LifeEventType.FAMILY_RELOCATION),
+        (["TRAVEL"], ["ABROAD", "OVERSEAS", "FOREIGN", "INTERNATIONAL"], LifeEventType.INTERNATIONAL_TRAVEL),
+        (["WILL"], ["ESTATE", "ASSETS", "HEIR", "PROPERTY", "BENEFICIAR"], LifeEventType.ESTATE_PLANNING),
+        (["PROPERTY"], ["INHERIT", "INHERITED", "ESTATE"], LifeEventType.PROPERTY_INHERITANCE),
+    ]
 
-    # Lower-specificity keywords — only add if not already covered by a high-specificity match
-    if any(w in upper_text for w in ["COMPANY", "BUSINESS", "COMAPNY", "FOUND"]) and LifeEventType.BUSINESS_STARTUP not in detected_types:
-        detected_types.append(LifeEventType.BUSINESS_STARTUP)
-    if any(w in upper_text for w in ["JOB", "CAREER", "ONBOARD", "EMPLOY", "HIRED", "JOINING"]):
-        detected_types.append(LifeEventType.JOB_ONBOARDING)
-    if any(w in upper_text for w in ["MOVE", "TRANSIT", "LANDING", "SHIFTING", "LIVING IN"]) and LifeEventType.RELOCATION not in detected_types:
-        detected_types.append(LifeEventType.RELOCATION)
-    if any(w in upper_text for w in ["BABY", "CHILD", "BORN", "BIRTH"]) and LifeEventType.PREGNANCY_PREPARATION not in detected_types:
-        detected_types.append(LifeEventType.PREGNANCY_PREPARATION)
-    if any(w in upper_text for w in ["LEGAL", "CITIZEN", "IDENTITY", "AADHAAR", "AADHAR"]) and LifeEventType.LEGAL_AND_IDENTITY not in detected_types:
-        detected_types.append(LifeEventType.LEGAL_AND_IDENTITY)
-    if any(w in upper_text for w in ["LOAN", "MORTGAGE", "FINANCE", "INVEST", "PROPERTY", "HOUSE", "RENT", "FLAT", "APARTMENT"]):
-        detected_types.append(LifeEventType.MONEY_AND_ASSETS)
+    for required, any_of, event_type in _SNIFFER_RULES:
+        if event_type in detected_types:
+            continue  # already detected
+        if all(kw in upper_text for kw in required):
+            if not any_of or any(kw in upper_text for kw in any_of):
+                detected_types.append(event_type)
 
     # Location Sniffer (Common cities & typos)
     LOCATIONS = {
@@ -227,11 +351,23 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
         "Singapore": ["SINGAPORE", "SGP", "SINGA"],
         "Berlin": ["BERLIN", "BRLN"],
         "Paris": ["PARIS", "PRIS"],
-        "India": ["INDIA", "IND", "DELHI", "MUMBAI", "BANGALORE", "HYDERABAD"],
-        "United States": ["USA", "US", "UNITED STATES", "AMERICA"],
+        "Italy": ["ITALY", "ROME", "MILAN", "MILANO", "FLORENCE", "VENICE", "ITALIAN"],
+        "Spain": ["SPAIN", "MADRID", "BARCELONA"],
+        "Greece": ["GREECE", "ATHENS", "GREEK"],
+        "France": ["FRANCE", "FRENCH"],
+        "Portugal": ["PORTUGAL", "LISBON"],
+        "Netherlands": ["NETHERLANDS", "AMSTERDAM", "DUTCH"],
+        "Sweden": ["SWEDEN", "STOCKHOLM"],
+        "India": ["INDIA", "IND", "DELHI", "MUMBAI", "BANGALORE", "HYDERABAD", "PUNE", "CHENNAI", "KOLKATA"],
+        "United States": ["USA", "UNITED STATES", "AMERICA"],
         "Canada": ["CANADA", "CAN"],
         "Australia": ["AUSTRALIA", "AUS"],
         "Germany": ["GERMANY", "GERM", "DEUTSCHLAND"],
+        "Japan": ["JAPAN", "TOKYO", "OSAKA"],
+        "United Kingdom": ["UK", "BRITAIN", "ENGLAND", "SCOTLAND", "WALES"],
+        "New Zealand": ["NEW ZEALAND", "NZ", "AUCKLAND"],
+        "Ireland": ["IRELAND", "DUBLIN"],
+        "Malaysia": ["MALAYSIA", "KUALA LUMPUR", "KL"],
     }
     for city, variants in LOCATIONS.items():
         if any(v in upper_text for v in variants):
@@ -243,31 +379,54 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
         guessed_title = "Personal Planning Journey"
         keyword_confidence = 0.5
     else:
-        # Higher confidence when we matched specific keywords + location
         keyword_confidence = 0.85 if location_guess else 0.75
-        # Build a smart combined title
-        # Build a smart combined title based on actual human terms
-        if any(w in upper_text for w in ["PASSPORT", "VISA", "IMMIG"]):
-            guessed_title = "Passport/Visa Process"
-        elif any(w in upper_text for w in ["RENEWAL"]):
-             guessed_title = "Document Renewal"
-        elif any(w in upper_text for w in ["MARRY", "MARRIAGE", "WEDDING"]):
-            guessed_title = "Wedding Planning"
-        elif any(w in upper_text for w in ["BABY", "PREGNANT", "CHILD", "BORN"]):
-            guessed_title = "Welcoming Your Baby"
-        elif any(w in upper_text for w in ["STARTUP", "BUSINESS", "VENTURE", "COMPANY"]):
-            guessed_title = "Business Launch"
-        elif any(w in upper_text for w in ["RELOTCAT", "RELOCAT", "TRANSIT", "MOVE"]):
-            guessed_title = "Relocation Process"
-        else:
-            type_labels = [t.value.replace('_', ' ').title() for t in detected_types]
-            if len(type_labels) > 2:
-                guessed_title = f"Multi-Phase {type_labels[0]} Strategy"
-            elif len(type_labels) == 2:
-                guessed_title = f"{type_labels[0]} & {type_labels[1]} Roadmap"
-            else:
-                guessed_title = f"{type_labels[0]} Transition"
-            
+        # Build title from the primary detected type
+        primary_type = detected_types[0]
+        _TITLE_MAP = {
+            LifeEventType.LEGAL_AND_IDENTITY: "Passport/Document Process",
+            LifeEventType.VISA_APPLICATION: "Visa Application",
+            LifeEventType.MARRIAGE_PLANNING: "Wedding Planning",
+            LifeEventType.WOMEN_DIVORCE_RECOVERY: "Divorce & Recovery Planning",
+            LifeEventType.PREGNANCY_PREPARATION: "Pregnancy Preparation",
+            LifeEventType.POSTPARTUM_WELLNESS: "Postpartum Planning",
+            LifeEventType.PARENTAL_LEAVE: "Parental Leave Planning",
+            LifeEventType.CHILD_SCHOOL_TRANSITION: "School Transition for Child",
+            LifeEventType.RELOCATION: "Relocation Planning",
+            LifeEventType.FAMILY_RELOCATION: "Family Relocation",
+            LifeEventType.BUSINESS_STARTUP: "Business Launch",
+            LifeEventType.WOMEN_ENTREPRENEURSHIP: "Women Entrepreneurship",
+            LifeEventType.FREELANCE_SETUP: "Freelance Setup",
+            LifeEventType.JOB_ONBOARDING: "Job Onboarding",
+            LifeEventType.CAREER_TRANSITION: "Career Transition",
+            LifeEventType.CAREER_UPSKILLING: "Skill Building & Upskilling",
+            LifeEventType.HOME_PURCHASE: "Home Purchase",
+            LifeEventType.RENTAL_VERIFICATION: "Rental Verification",
+            LifeEventType.VEHICLE_PURCHASE: "Vehicle Purchase",
+            LifeEventType.RETIREMENT_PLANNING: "Retirement Planning",
+            LifeEventType.ESTATE_PLANNING: "Estate Planning",
+            LifeEventType.PROPERTY_INHERITANCE: "Property Inheritance",
+            LifeEventType.DEBT_MANAGEMENT: "Debt Management",
+            LifeEventType.HEALTH_INSURANCE: "Health Insurance Planning",
+            LifeEventType.MEDICAL_EMERGENCY: "Medical Emergency",
+            LifeEventType.WELLNESS_MANAGEMENT: "Wellness Management",
+            LifeEventType.WORKPLACE_WELLNESS: "Workplace Wellness",
+            LifeEventType.HEALTH_AND_DISABILITY: "Health & Disability Support",
+            LifeEventType.ELDERCARE_MANAGEMENT: "Elder Care Planning",
+            LifeEventType.ADOPTION_PROCESS: "Adoption Process",
+            LifeEventType.GRIEF_SUPPORT: "Grief & Bereavement Support",
+            LifeEventType.REPATRIATION: "Repatriation",
+            LifeEventType.NRI_RETURN_TO_INDIA: "NRI Return to India",
+            LifeEventType.STUDY_ABROAD: "Study Abroad",
+            LifeEventType.GRADUATE_STUDIES: "Graduate Studies",
+            LifeEventType.EDUCATIONAL_ENROLLMENT: "College Enrollment",
+            LifeEventType.EDUCATION_FINANCING: "Education Financing",
+            LifeEventType.INTERNATIONAL_TRAVEL: "International Travel",
+            LifeEventType.VOLUNTEER_WORK: "Volunteer Work",
+            LifeEventType.PET_ADOPTION: "Pet Adoption",
+            LifeEventType.PERSONAL_GROWTH: "Personal Growth Journey",
+            LifeEventType.MONEY_AND_ASSETS: "Financial Planning",
+        }
+        guessed_title = _TITLE_MAP.get(primary_type, primary_type.value.replace("_", " ").title())
         if location_guess:
             guessed_title += f" ({location_guess})"
 
