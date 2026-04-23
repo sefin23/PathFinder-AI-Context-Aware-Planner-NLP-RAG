@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="pathfinder_logo.svg" alt="PathFinder AI Logo" width="80" />
+</p>
+
 Pathfinder AI:
 
 A user is facing a life situation but doesn't know where to start. For example, the user types, "I'm finishing college and moving to a new city for my first job" and uploads their offer letter. PathFinder AI understands the situation and breaks it into steps like documentation, accommodation, banking, and onboarding, with suggested timelines. As tasks are completed or circumstances change, the system updates the plan and shows what needs attention next, helping the user move forward without feeling overwhelmed.
