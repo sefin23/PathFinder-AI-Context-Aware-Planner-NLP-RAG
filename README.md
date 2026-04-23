@@ -99,3 +99,9 @@ Developer Tooling:
 - GitLens — Improves visibility into code history and changes inside VS Code.
 - CodeRabbit — AI code review integrated into GitHub, used to catch documentation mismatches and security issues.
 - Thunder Client / REST Client — API testing during development.
+
+Documentation:
+
+- [Life Events Library & Use Cases](LIFE_EVENTS_LIBRARY.md) — The 10 life event domains supported, real-world use cases, and target audience breakdown.
+- [Backend README](backend/README.md) — Tech stack breakdown with reasoning, AI pipeline overview, and setup instructions.
+- [Frontend README](frontend/README.md) — Frontend tech stack with reasoning and folder structure.
