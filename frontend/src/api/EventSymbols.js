@@ -45,20 +45,8 @@ export const getEventVisuals = (title = '', displayTitle = '', category = null) 
   // Helper: check if any keyword in array appears in t
   const has = (...kws) => kws.some(k => t.includes(k))
 
-  // 0. Lifecycle / Universal Phases — only when no specific event type is present
-  const isSpecificEvent = has('RELOCAT', 'MOV', 'TRANSIT', 'JOB ', 'CAREER', 'ONBOARD', 'STARTUP', 'BUSINESS', 'RENT', 'HOUSE', 'HOME', 'EDUC', 'HEALTH', 'MEDICAL', 'MARRIAG', 'WEDDING', 'TRAVEL', 'VEHICLE', 'RETIRE', 'FINANC', 'MONEY', 'LEGAL', 'VISA', 'UTILIT')
-  if (!isSpecificEvent && has('REQUIREMENT', 'UNDERSTAND', 'RESEARCH', 'PLANNING', 'ANALY', 'PREP', 'GATHER', 'ASSESS', 'AUDIT', 'SURVEY', 'OVERVIEW', 'ORIENTAT', 'DISCOVER', 'EVALUAT', 'REVIEW', 'CHECKLIST')) {
-    image = '/images/events/academic_planning_min.png'; color = 'var(--amber)'; emoji = '📋'; label = 'Planning'; colorName = 'amber'
-  }
-  else if (has('FINAL', 'SUCCESS', 'ARRIVE', 'CONCLUSION', 'DESTINATION', 'ACHIEV', 'ACCOMPLISH', 'WRAP', 'CELEBRAT', 'COMPLET')) {
-    image = '/images/events/event_planning_min.png'; color = 'var(--amber)'; emoji = '🏆'; label = 'Success'; colorName = 'amber'
-  }
-  else if (has('CLOSURE', 'RECLAM', 'RECEIV', 'HANDOVER', 'HANDOFF', 'SUBMIT', 'DELIVER')) {
-    image = '/images/events/event_planning_min.png'; color = 'var(--amber)'; emoji = '🏁'; label = 'Finalization'; colorName = 'amber'
-  }
-
   // 1. Relocation / Moving / Repatriation (Amber)
-  else if (has('RELOCAT', 'MOV', 'TRANSIT', 'ARRIV', 'REPATRIAT', 'SETTL', 'MIGRAT')) {
+  if (has('RELOCAT', 'MOV', 'TRANSIT', 'ARRIV', 'REPATRIAT', 'SETTL', 'MIGRAT')) {
     image = '/images/events/relocation_min.png'; color = 'var(--amber)'; emoji = '🚚'; label = 'Relocation'; colorName = 'amber'
   }
   // 2. Career / Job / Work / Onboarding / Employment (Amber)
@@ -163,11 +151,23 @@ export const getEventVisuals = (title = '', displayTitle = '', category = null) 
     else image = '/images/events/family_relations_min.png';
     color = 'var(--sage)'; emoji = '👪'; label = 'Family'; colorName = 'sage'
   }
-  // 19. Caution / Warnings / Mistakes to avoid
+
+  // 19. Lifecycle / Universal Phases — lower priority than specific events
+  else if (has('REQUIREMENT', 'UNDERSTAND', 'RESEARCH', 'PLANNING', 'ANALY', 'PREP', 'GATHER', 'ASSESS', 'AUDIT', 'SURVEY', 'OVERVIEW', 'ORIENTAT', 'DISCOVER', 'EVALUAT', 'REVIEW', 'CHECKLIST')) {
+    image = '/images/events/academic_planning_min.png'; color = 'var(--amber)'; emoji = '📋'; label = 'Planning'; colorName = 'amber'
+  }
+  else if (has('FINAL', 'SUCCESS', 'ARRIVE', 'CONCLUSION', 'DESTINATION', 'ACHIEV', 'ACCOMPLISH', 'WRAP', 'CELEBRAT', 'COMPLET')) {
+    image = '/images/events/event_planning_min.png'; color = 'var(--amber)'; emoji = '🏆'; label = 'Success'; colorName = 'amber'
+  }
+  else if (has('CLOSURE', 'RECLAM', 'RECEIV', 'HANDOVER', 'HANDOFF', 'SUBMIT', 'DELIVER')) {
+    image = '/images/events/event_planning_min.png'; color = 'var(--amber)'; emoji = '🏁'; label = 'Finalization'; colorName = 'amber'
+  }
+  
+  // 20. Caution / Warnings
   else if (has('AVOID', 'MISTAKE', 'PITFALL', 'TRAP', 'WARN', 'CAUTION', 'COMMON ERROR', 'DON\'T', 'DANGER', 'RISK', 'PREVENT', 'PROTECT')) {
     image = '/images/events/academic_planning_min.png'; color = 'var(--coral)'; emoji = '⚠️'; label = 'Caution'; colorName = 'coral'
   }
-  // 20. Work / Project (fallback career catch)
+  // 21. Work / Project (fallback)
   else if (has('WORK', 'PROJECT', 'TASK', 'WORKFLOW', 'PROCESS', 'EXECUT', 'IMPLEMENT', 'ACTION', 'STRATEG', 'INITIATIVE', 'PROGRAM')) {
     image = '/images/events/work_and_career_min.png'; color = 'var(--amber)'; emoji = '💼'; label = 'Work'; colorName = 'amber'
   }

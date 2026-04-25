@@ -56,7 +56,6 @@ export default function TaskItem({
 
   return (
     <motion.div
-      layout
       className={task.done ? "task-row done" : "task-row"}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}

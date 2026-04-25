@@ -523,7 +523,7 @@ export default function Dashboard() {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.5 }}
                     >
-                      <LifeEventInput stage={stage} onSubmit={runPipeline} analysisData={analysisData} />
+                      <LifeEventInput stage={stage} onSubmit={runPipeline} onAbort={resetPipeline} analysisData={analysisData} />
                       
                       <AnimatePresence>
                         {isRunning && (

@@ -11,13 +11,14 @@ import { format, parseISO } from 'date-fns'
 
 const RUNNING_STAGES = ['analyzing', 'analyzed', 'loading-docs', 'docs-loaded', 'generating']
 
-export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData }) {
+export default function LifeEventInput({ stage = 'idle', onSubmit, onAbort, analysisData }) {
   const [text, setText] = useState('')
   const [startDate, setStartDate] = useState('')
   const [dateError, setDateError] = useState(null)
   const [showClarification, setShowClarification] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [hasAborted, setHasAborted] = useState(false)
   const busy = RUNNING_STAGES.includes(stage)
   const canSubmit = text.trim().length >= 10 && !busy
 
@@ -38,12 +39,15 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
 
   // Clear inputs on full reset
   useEffect(() => {
-    if (stage === 'idle' && !analysisData) {
+    if (stage === 'idle' && !analysisData && !hasAborted) {
       setText('')
       setStartDate('')
       setDateError(null)
     }
-  }, [stage, analysisData])
+    if (analysisData && hasAborted) {
+      setHasAborted(false)
+    }
+  }, [stage, analysisData, hasAborted])
 
   const handleSubmit = () => { 
     if (canSubmit) { 
@@ -90,9 +94,15 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
     onSubmit?.(combinedText, startDate, true)
   }
 
-  const handleClarificationCancel = () => {
+  const handleClarificationSkipAll = () => {
     setShowClarification(false)
     onSubmit?.(text, startDate, true)
+  }
+
+  const handleClarificationAbort = () => {
+    setShowClarification(false)
+    setHasAborted(true)
+    onAbort?.()
   }
 
   const clarification = analysisData?.clarification_needed ? analysisData.questions : null
@@ -356,7 +366,8 @@ export default function LifeEventInput({ stage = 'idle', onSubmit, analysisData 
               <ClarificationModal 
                 questions={analysisData.questions} 
                 onComplete={handleClarificationComplete}
-                onCancel={handleClarificationCancel}
+                onSkipAll={handleClarificationSkipAll}
+                onAbort={handleClarificationAbort}
               />
             </motion.div>
           </div>

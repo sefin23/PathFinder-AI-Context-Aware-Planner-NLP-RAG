@@ -154,7 +154,7 @@ _FALLBACK_QUESTIONS: dict[str, list[dict]] = {
     "BUSINESS_STARTUP": [
         {"question": "What type of business are you planning to start — product, service, tech, or retail?"},
         {"question": "Which city or country will the business be registered in?"},
-        {"question": "Are you bootstrapping, or are you looking to raise investment?"},
+        {"question": "Are you self-funding this from your savings, or do you need a loan/investor?"},
     ],
     "WOMEN_ENTREPRENEURSHIP": [
         {"question": "What type of business are you starting or scaling — product, service, or digital?"},
@@ -168,8 +168,8 @@ _FALLBACK_QUESTIONS: dict[str, list[dict]] = {
     ],
     "MEDICAL_EMERGENCY": [
         {"question": "Is the patient currently hospitalised, or are you preparing a plan for a potential emergency?"},
-        {"question": "Does the patient have active health insurance — if yes, do you know the TPA name and policy number?"},
-        {"question": "Which city and hospital are involved? (This helps identify cashless network status.)"},
+        {"question": "Does the patient have active health insurance — if yes, do you know the insurance provider and policy number?"},
+        {"question": "Which city and hospital are involved? (This helps check if cashless treatment is available.)"},
     ],
     "VISA_APPLICATION": [
         {"question": "Which country are you applying for a visa to?"},
@@ -304,7 +304,7 @@ _FALLBACK_QUESTIONS: dict[str, list[dict]] = {
     ],
     "STUDY_ABROAD": [
         {"question": "Which country and university are you targeting?"},
-        {"question": "What intake are you applying for — September/January of which year?"},
+        {"question": "Which semester or term are you aiming for (e.g., Fall/September or Spring/January)?"},
         {"question": "Have you started your standardized tests (IELTS/TOEFL/GRE), or is that still pending?"},
     ],
     "GRADUATE_STUDIES": [
@@ -344,7 +344,7 @@ _FALLBACK_QUESTIONS: dict[str, list[dict]] = {
     ],
     "FREELANCE_SETUP": [
         {"question": "What type of freelance work are you setting up — creative, technical, consulting, or another field?"},
-        {"question": "Are you in India or abroad, and do you need to register as an MSME or set up formal invoicing?"},
+        {"question": "Are you in India or abroad, and do you need to register as an official business or just set up formal invoicing?"},
         {"question": "Do you already have clients lined up, or do you also need help with finding work and building a presence?"},
     ],
 }
@@ -671,12 +671,18 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
     ("destination", re.compile(
         r"\b(bangalore|bengaluru|mumbai|bombay|delhi|new delhi|pune|hyderabad|"
         r"chennai|madras|kolkata|calcutta|ahmedabad|jaipur|surat|lucknow|"
-        r"chandigarh|kochi|cochin|goa|noida|gurugram|gurgaon|bhopal|indore|"
+        r"chandigarh|kochi|cochin|ernakulam|thrissur|kozhikode|calicut|"
+        r"goa|noida|gurugram|gurgaon|bhopal|indore|mangalore|mysore|"
         r"nagpur|visakhapatnam|vizag|vadodara|baroda|patna|coimbatore|"
-        r"thiruvananthapuram|trivandrum|bhubaneswar|"
+        r"thiruvananthapuram|trivandrum|bhubaneswar|kolhapur|nashik|"
+        r"dehradun|shimla|jammu|srinagar|leh|agra|varanasi|kanpur|"
         r"usa|uk|united states|united kingdom|canada|australia|new zealand|"
-        r"singapore|dubai|uae|germany|france|ireland|malaysia|japan|"
-        r"toronto|melbourne|sydney|london|amsterdam|zurich)\b",
+        r"singapore|dubai|abu dhabi|uae|germany|france|ireland|malaysia|japan|"
+        r"toronto|melbourne|sydney|london|amsterdam|zurich|berlin|munich|"
+        r"new york|san francisco|seattle|chicago|boston|los angeles|"
+        r"netherlands|sweden|norway|denmark|spain|italy|portugal|"
+        r"qatar|bahrain|kuwait|saudi arabia|oman|hong kong|taiwan|"
+        r"in (my |my home in |home in )?[a-z]+)\b",
         re.I
     )),
     # Reason / motivation for the event
@@ -686,7 +692,13 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
         r"personal reason|for family|fresh start|got (a|the) role|"
         r"accepted.{0,15}offer|career (move|opportunity)|"
         r"for leisure|for tourism|for (a )?(holiday|vacation|trip)|leisure trip|"
-        r"for business|business trip|for sightseeing)\b",
+        r"for business|business trip|for sightseeing|"
+        r"starting (a |my )?(business|company|startup|venture|shop|practice)|"
+        r"setting up|setting it up|launching|opening (a|my)|"
+        r"from home|home.based|home business|side hustle|"
+        r"returning (home|to india|to my country)|moving back|"
+        r"got (married|transferred|promoted|selected|admission)|transfer(red)?|"
+        r"deputation|posting|assignment abroad|secondment)\b",
         re.I
     )),
     # Timeline / deadline already given
@@ -742,12 +754,45 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
         r"bachelor\w*|b\.tech|b\.e\.|undergraduate|diploma|bootcamp)\b",
         re.I
     )),
-    # Business type or sector
     ("business_type", re.compile(
-        r"\b(tech startup|saas|e.?commerce|retail (business|shop)|restaurant|"
-        r"salon|cafe|consulting (firm|business)|freelance (work|business)|"
+        r"\b(tech startup|saas|e.?commerce|retail (business|shop|store)|restaurant|bakery|"
+        r"cloud kitchen|tiffin (service|business)|catering (business|service)|"
+        r"salon|spa|beauty parlour|parlour|beauty salon|nail studio|"
+        r"cafe|coffee shop|tea stall|dhaba|mess|canteen|"
+        r"consulting (firm|business)|consultancy|advisory (firm|service)|"
+        r"freelance (work|business)|freelancing|"
         r"service (business|company)|product (company|startup)|"
-        r"manufacturing|fashion|food business)\b",
+        r"agency|marketing agency|digital agency|pr agency|"
+        r"clinic|dental clinic|physiotherapy|hospital|nursing home|"
+        r"diagnostic (centre|center|lab)|pharmacy|medical store|"
+        r"studio|yoga studio|dance studio|music studio|photography studio|fitness studio|"
+        r"boutique|fashion (house|brand)|tailoring|garment|"
+        r"gym|fitness centre|wellness centre|"
+        r"tuition (centre|center)|coaching (centre|center|class)|training institute|"
+        r"daycare|creche|nursery|preschool|play school|"
+        r"grocery (store|shop)|kirana|supermarket|provision store|"
+        r"travel (agency|company)|tour operator|"
+        r"manufacturing|factory|production unit|"
+        r"fashion|apparel|clothing (brand|business)|"
+        r"food business|food (brand|startup)|homemade food|home cook|"
+        r"pet (shop|store|grooming|care)|veterinary|"
+        r"interior (design|decoration)|architecture firm|"
+        r"law firm|legal (practice|services)|chartered accountant|ca firm|"
+        r"real estate (agency|business)|property (dealer|consultant)|"
+        r"import.export|trading (company|firm|business)|"
+        r"logistics|courier|delivery (service|business)|"
+        r"software (company|firm|development)|it company|app development|"
+        r"e.learning|online (course|coaching|tutoring|classes)|"
+        r"event (management|planning|company)|wedding planner|"
+        r"cleaning (service|company)|housekeeping service|"
+        r"security (agency|service)|manpower (agency|service)|"
+        r"printing (press|shop|business)|packaging|"
+        r"book (store|shop)|stationery|library|"
+        r"auto (repair|garage|workshop)|car (repair|service|wash)|"
+        r"laundry|dry cleaning|"
+        r"juice (bar|shop|centre)|ice cream (parlour|shop)|sweets|mithai|"
+        r"dropshipping|affiliate|reselling|mlm|network marketing|"
+        r"ngo|non.profit|social enterprise|foundation|trust)\b",
         re.I
     )),
     # Wedding / marriage timing
@@ -782,8 +827,11 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
     )),
     # Pet type specified
     ("pet_type", re.compile(
-        r"\b(adopt\w* (a |an )?(dog|cat|puppy|kitten|rabbit|bird)|"
-        r"(a |my )(dog|cat|puppy|kitten|rabbit|hamster|guinea pig))\b",
+        r"\b(adopt\w* (a |an )?(dog|cat|puppy|kitten|rabbit|bird|fish|hamster|guinea pig|turtle|parrot)|"
+        r"(a |my )(dog|cat|puppy|kitten|rabbit|hamster|guinea pig|parrot|fish|turtle)|"
+        r"(labrador|golden retriever|german shepherd|poodle|beagle|husky|pug|rottweiler|shih tzu|dachshund|doberman|indie|indian stray)|"
+        r"(persian|siamese|bengal|maine coon|british shorthair|ragdoll) cat|"
+        r"pet (cat|dog|rabbit|bird|fish)|my (dog|cat|pet)|a (dog|cat|puppy|kitten))\b",
         re.I
     )),
     # Child age / grade mentioned
@@ -805,7 +853,10 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
     ("vehicle_type", re.compile(
         r"\b(buy(ing)? (a |an )?(new|used|second.?hand)? ?(car|bike|scooter|"
         r"motorcycle|suv|sedan|hatchback|ev|electric (car|vehicle)|"
-        r"two.?wheeler|four.?wheeler))\b",
+        r"two.?wheeler|four.?wheeler|auto|van|truck|commercial vehicle|"
+        r"tempo|pickup truck|minivan|mpv|crossover)|"
+        r"(car|bike|scooter|motorcycle|vehicle|suv|ev) (loan|purchase|registration)|"
+        r"first (car|bike|vehicle)|(my|a) (new|used|second.?hand) (car|bike|scooter|vehicle)|maruti|honda|hyundai|tata|mahindra|suzuki|toyota|kia|mg|bajaj|royal enfield|hero|tvs|yamaha|kawasaki|bmw (car|bike|x\d)|ola (electric|s1)|ather|chetak|activa|jupiter|access|ntorq|bullet|classic (350|500)|splendor|pulsar|r15|duke|ktm|ninja)\b",
         re.I
     )),
     # Permanency of move / return
@@ -837,13 +888,21 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
     ("elder_needs", re.compile(
         r"\b(daily care|medical care|needs (daily|medical|financial) (care|support|help)|"
         r"(daily|medical|financial) (care|support|help)|"
-        r"dementia|bedridden|full.?time care)\b",
+        r"dementia|alzheimer|parkinson|bedridden|full.?time care|"
+        r"dialysis|chemotherapy|post.surgery|recovering from|"
+        r"wheelchair|mobility (issues|problems)|vision (loss|problem)|"
+        r"diabetes|blood pressure|heart (condition|disease|attack|surgery)|"
+        r"stroke|cancer|kidney (failure|disease)|liver (disease|cirrhosis))\b",
         re.I
     )),
-    # Retirement savings status
+    # Retirement savings already stated
     ("savings_status", re.compile(
-        r"\b(epf|ppf|nps|mutual funds|sip|portfolio|"
-        r"existing (savings|investments)|retirement (corpus|savings|fund))\b",
+        r"\b(epf|ppf|nps|mutual funds|sip|portfolio|stocks|equity|"
+        r"existing (savings|investments)|retirement (corpus|savings|fund)|"
+        r"fd|fixed deposit|recurring deposit|rd|provident fund|"
+        r"term (plan|insurance)|life insurance|ulip|lic (policy|plan)|"
+        r"real estate (investment|portfolio)|gold (savings|bonds|etf)|"
+        r"no (savings|investments)|just started (saving|investing))\b",
         re.I
     )),
     # Landlord or tenant role
@@ -854,9 +913,16 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
     )),
     # Event type / headcount
     ("event_type", re.compile(
-        r"\b(corporate (event|conference|summit)|birthday (party|celebration)|"
-        r"anniversary (event|party)|product launch|team (outing|event)|"
-        r"for \d+ (people|guests|attendees))\b",
+        r"\b(corporate (event|conference|summit|retreat|offsite|party)|"
+        r"birthday (party|celebration|bash)|anniversary (event|party|celebration)|"
+        r"product launch|launch (event|party)|team (outing|event|party|building)|"
+        r"baby shower|bridal shower|bachelorette|bachelor (party|trip)|"
+        r"engagement (party|ceremony)|reception|housewarming|"
+        r"farewell (party|event)|retirement (party|event)|"
+        r"cultural (event|programme|program)|festival (event|celebration)|"
+        r"fundraiser|charity (event|gala|dinner)|"
+        r"conference|seminar|workshop|webinar|townhall|annual (day|meet|event)|"
+        r"for \d+ (people|guests|attendees|heads)|\d+ guests|\d+ people)\b",
         re.I
     )),
     # NRI foreign assets disclosure
@@ -943,6 +1009,47 @@ _INPUT_PROVIDES: list[tuple[str, re.Pattern]] = [
         r"\b((proof of funds|bank statements|financial (proof|documents|paperwork)).{0,20}(ready|done|prepared|have)|"
         r"(have|got) (my )?(bank statements|financial proof|proof of funds)|"
         r"funds (ready|sorted|documented|in order))\b",
+        re.I
+    )),
+    # Career industry / domain — prevents asking "which industry" if already stated
+    ("reason", re.compile(
+        r"\b(software (engineer|developer|developer|architect)|data (scientist|analyst|engineer)|"
+        r"product (manager|analyst)|devops|cloud (engineer|architect)|machine learning|"
+        r"ai (engineer|researcher)|full.?stack|backend|frontend|mobile (developer|engineer)|"
+        r"doctor|physician|dentist|nurse|physiotherapist|pharmacist|"
+        r"chartered accountant|ca|lawyer|advocate|solicitor|"
+        r"teacher|professor|lecturer|academic|"
+        r"marketing (manager|executive|professional)|sales (manager|executive)|"
+        r"finance (manager|analyst|professional)|banking (professional|executive)|"
+        r"hr (manager|executive|professional)|human resources|"
+        r"journalist|content (creator|writer|strategist)|copywriter|"
+        r"architect|civil (engineer|contractor)|mechanical engineer|electrical engineer|"
+        r"fashion (designer|stylist)|graphic (designer|artist)|ux (designer|researcher)|"
+        r"chef|cook|baker|pastry chef|nutritionist|dietitian|"
+        r"social worker|counsellor|psychologist|therapist|"
+        r"entrepreneur|founder|co.?founder|business owner|self.?employed|"
+        r"government (job|employee|officer|servant)|ias|ips|upsc|civil services)\b",
+        re.I
+    )),
+    # Bootstrapped vs funded — prevents asking funding question
+    ("loan_finance", re.compile(
+        r"\b(bootstrapping|self.?funded|using (my |my own )?savings|own funds|"
+        r"angel (investor|funding|round)|seed (funding|round|investment)|"
+        r"venture capital|vc (funding|backed)|series (a|b|c)|"
+        r"bank loan|business loan|mudra loan|msme loan|"
+        r"home loan|bank loan|taking a loan|need a loan|with a loan|"
+        r"self.?fund|cash purchase|paying cash|no loan|own savings|"
+        r"without loan|loan.{0,15}sanction)\b",
+        re.I
+    )),
+    # Registered business / MSME — prevents asking if already registered
+    ("cofounders", re.compile(
+        r"\b(sole (founder|co.?founder)|co.?founder(s)?\b|founding team of \d+|"
+        r"(two|three|four) (of us|founders|co.?founders)|"
+        r"starting (it |this )?(alone|solo|by myself)|"
+        r"already registered|udyam (registered|registration)|"
+        r"gst (registered|registration|number)|msme (registered|registration)|"
+        r"pvt ltd|private limited|llp|sole proprietor|partnership firm|one person company|opc)\b",
         re.I
     )),
 ]

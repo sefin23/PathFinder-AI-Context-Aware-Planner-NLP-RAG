@@ -495,9 +495,6 @@ function HistoryCard({ plan, index, total, onOpen, onDelete }) {
           {/* Action Level Footer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ display: 'flex', gap: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 800, color: color, textTransform: 'uppercase', fontFamily: "'JetBrains Mono', monospace", opacity: 0.8 }}>
-                <Clock size={13} color={color} /> {isCompleted ? 'ARCHIVED' : 'STRATEGIC ROADMAP'}
-              </div>
               <motion.div 
                 whileHover={{ opacity: 1, scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -506,17 +503,18 @@ function HistoryCard({ plan, index, total, onOpen, onDelete }) {
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: 8, 
-                  fontSize: 11, 
+                  fontSize: 13, 
                   fontWeight: 800, 
                   color: '#ff6b6b', 
                   textTransform: 'uppercase', 
                   cursor: 'pointer', 
                   fontFamily: "'JetBrains Mono', monospace",
-                  opacity: 0.8,
+                  opacity: 1,
+                  letterSpacing: '0.05em',
                   transition: 'opacity 0.2s ease'
                 }}
               >
-                <Trash2 size={13} /> REMOVE EVENT
+                <Trash2 size={15} /> REMOVE EVENT
               </motion.div>
             </div>
             

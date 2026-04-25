@@ -193,6 +193,70 @@ _EVENT_SUGGESTIONS: dict[str, list[str]] = {
         "How early should I apply for my travel date?",
         "What should I do if biometrics slots are full?",
     ],
+    "BUSINESS_STARTUP": [
+        "What's the fastest legal structure I can set up?",
+        "When exactly do I need to register for GST?",
+        "What can I delay until I have my first customer?",
+        "Which task is blocking everything else right now?",
+        "What are the most common mistakes first-time business owners make?",
+        "How do I protect my business name early?",
+    ],
+    "FREELANCE_SETUP": [
+        "Do I need to register as a business from day one?",
+        "How do I handle taxes as a freelancer in India?",
+        "What should a freelance contract include?",
+        "When should I start charging GST to clients?",
+        "What's the fastest way to get my first paying client?",
+        "How do I protect myself if a client doesn't pay?",
+    ],
+    "TRAVEL_RELOCATION": [
+        "What should I do in the first week after arriving?",
+        "What's the most time-sensitive task before I leave India?",
+        "How do I handle my Indian bank accounts while abroad?",
+        "What documents should I carry on the day I travel?",
+        "How do I handle tax residency if I'm abroad for over a year?",
+        "What can I sort out in parallel to save time?",
+    ],
+    "ELDERCARE_MANAGEMENT": [
+        "What legal documents should I put in place urgently?",
+        "How do I evaluate a care facility or home nurse?",
+        "What government schemes are available for senior citizens?",
+        "How do I manage their finances if they can't do it themselves?",
+        "What medical insurance options work for someone their age?",
+        "What should I do if there's a sudden medical emergency?",
+    ],
+    "ESTATE_PLANNING": [
+        "What's the single most important thing to do first?",
+        "What happens if someone dies without a will in India?",
+        "How do I add or change nominees on financial accounts?",
+        "What's the difference between a will and a trust here?",
+        "How do I make sure my family doesn't face legal hassles later?",
+        "Which assets need special attention or separate documentation?",
+    ],
+    "ADOPTION_PROCESS": [
+        "How long does the CARA process typically take?",
+        "What does a home study involve and how do I prepare?",
+        "What are the most common reasons for delays?",
+        "What legal steps happen after matching?",
+        "What should we do to prepare our home before the child arrives?",
+        "What support is available after the adoption is complete?",
+    ],
+    "PREGNANCY_PREPARATION": [
+        "What's most urgent in my current trimester?",
+        "How do I make the most of my maternity leave?",
+        "What should I prepare at home before the due date?",
+        "Which hospital documents do I need in advance?",
+        "What insurance claims can I start preparing now?",
+        "What should my partner or family be doing in parallel?",
+    ],
+    "CHILD_SCHOOL_TRANSITION": [
+        "What documents are most commonly missed in school admissions?",
+        "How early should I start the application process?",
+        "What's the RTE quota process and do we qualify?",
+        "How do I get a transfer certificate quickly from the current school?",
+        "What if the school we want doesn't have a spot?",
+        "How do I make this transition easier for my child?",
+    ],
 }
 
 _DEFAULT_SUGGESTIONS = [
@@ -290,7 +354,17 @@ def _format_requirements_for_prompt(life_event: LifeEvent) -> str:
 
 
 def _get_event_type(life_event: LifeEvent) -> str:
-    """Extract the primary event type from the title field (stored as enum key)."""
+    """Extract the primary event type from metadata_json (most reliable source),
+    falling back to title. Returns the enum key e.g. 'BUSINESS_STARTUP'."""
+    # Try metadata_json first — this is where the actual enum type is stored
+    try:
+        meta = json.loads(life_event.metadata_json or '{}')
+        types = meta.get('event_types') or []
+        if types:
+            return str(types[0]).upper().replace(" ", "_")
+    except Exception:
+        pass
+    # Fallback: derive from title (less reliable)
     return (life_event.title or "").upper().replace(" ", "_")
 
 

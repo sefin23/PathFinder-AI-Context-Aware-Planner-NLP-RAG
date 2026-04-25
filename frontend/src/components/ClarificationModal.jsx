@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Sparkles, HelpCircle, ChevronRight } from 'lucide-react'
 
-export default function ClarificationModal({ questions = [], onComplete, onCancel }) {
+export default function ClarificationModal({ questions = [], onComplete, onSkipAll, onAbort }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [direction, setDirection] = useState(1) // 1 for right, -1 for left
@@ -154,16 +154,30 @@ export default function ClarificationModal({ questions = [], onComplete, onCance
 
       {/* Footer Actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 40 }}>
-          <button 
-            onClick={onCancel}
-            style={{ 
-                background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" 
-            }}
-            onMouseEnter={e => e.target.style.color = 'var(--fog)'}
-            onMouseLeave={e => e.target.style.color = 'var(--muted)'}
-          >
-              Skip All
-          </button>
+          <div style={{ display: 'flex', gap: 12 }}>
+              <button 
+                onClick={onAbort}
+                className="btn-cust"
+                style={{ 
+                    background: 'transparent', border: '1px solid rgba(216, 110, 110, 0.2)', color: 'var(--coral)', fontSize: 14, fontWeight: 600, padding: '10px 20px', borderRadius: 'var(--r-pill)'
+                }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(216, 110, 110, 0.1)'; e.target.style.borderColor = 'rgba(216, 110, 110, 0.4)'; }}
+                onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.borderColor = 'rgba(216, 110, 110, 0.2)'; }}
+              >
+                  Cancel
+              </button>
+              <button 
+                onClick={onSkipAll}
+                className="btn-cust"
+                style={{ 
+                    background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--fog)', fontSize: 14, fontWeight: 600, padding: '10px 20px', borderRadius: 'var(--r-pill)'
+                }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(255, 255, 255, 0.05)'; e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)'; e.target.style.color = 'white'; }}
+                onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'; e.target.style.color = 'var(--fog)'; }}
+              >
+                  Skip All
+              </button>
+          </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
               {currentIndex > 0 && (

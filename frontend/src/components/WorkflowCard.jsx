@@ -560,7 +560,7 @@ export default function WorkflowCard({ data, approved, approving, initialStartDa
       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
       style={{
         background: 'rgba(255,255,255,0.02)',
-        backdropFilter: 'blur(32px)',
+        backdropFilter: 'blur(16px)',
         borderRadius: 'var(--r-lg)',
         padding: 'var(--space-4)',
         border: '1.5px solid rgba(255,255,255,0.06)',
