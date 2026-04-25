@@ -55,7 +55,4 @@ All images follow a consistent "Apple Product Studio" aesthetic: **Single Object
 
 ---
 
-## 🛠️ Visual Standards for Generation
-When generating these assets, the following prompt structure is mandatory:
 
-> *"Minimal 3D render, single hero object, soft warm studio lighting, very dark background, subtle ambient glow, matte and metallic textures, clean composition, premium product aesthetic, no text, no people, no fantasy elements, no clutter, photorealistic. Subject: [Specific Subject Description]"*
