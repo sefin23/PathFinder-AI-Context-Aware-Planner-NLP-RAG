@@ -379,12 +379,16 @@ export default function JourneyTaskCard({
         </div>
       )}
 
-      {/* ── Action Bar (active task) ───────────────────────────────── */}
-      {!task.done && (
-        <div style={{ padding: '10px 18px 16px' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+      {/* ── Action Bar — always shown so task can be toggled in both directions ── */}
+      <div style={{ padding: '10px 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
 
-            {/* Guide me through this */}
+          {/* Guide me / greyed out if done */}
+          {task.done ? (
+            <div style={{ flex: 2, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>🧭 Guide me through this →</span>
+            </div>
+          ) : (
             <button
               onClick={() => onOpenGuide?.(task)}
               style={{
@@ -400,8 +404,10 @@ export default function JourneyTaskCard({
                 🧭 Guide me through this →
               </span>
             </button>
+          )}
 
-            {/* Schedule (inline planner trigger) */}
+          {/* Schedule (inline planner trigger) */}
+          {!task.done && (
             <button
               onClick={() => onOpenPlanner?.(task)}
               title="Open daily planner"
@@ -420,39 +426,36 @@ export default function JourneyTaskCard({
                 {task.has_scheduling_conflict ? 'CLASH' : 'SCHEDULE'}
               </span>
             </button>
+          )}
 
-            {/* Mark done */}
-            <button
-              onClick={() => onToggleDone?.(task.id)}
-              style={{
-                flex: 1, padding: '10px 14px',
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 10, color: 'rgba(255,255,255,0.7)',
-                fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-            >
-              ✓ Mark done
-            </button>
-          </div>
+          {/* Mark done / Undo button — always clickable */}
+          <button
+            onClick={() => onToggleDone?.(task.id)}
+            title={task.done ? 'Click to undo completion' : 'Mark as complete'}
+            style={{
+              flex: 1, padding: '10px 14px',
+              background: task.done ? 'rgba(92,140,117,0.1)' : 'rgba(255,255,255,0.05)',
+              border: task.done ? '1px solid rgba(92,140,117,0.3)' : '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 10,
+              color: task.done ? 'var(--sage)' : 'rgba(255,255,255,0.7)',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.25s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = task.done ? 'rgba(216,110,110,0.08)' : 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.borderColor = task.done ? 'rgba(216,110,110,0.4)' : 'rgba(255,255,255,0.2)'
+              e.currentTarget.style.color = task.done ? 'var(--coral)' : 'white'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = task.done ? 'rgba(92,140,117,0.1)' : 'rgba(255,255,255,0.05)'
+              e.currentTarget.style.borderColor = task.done ? 'rgba(92,140,117,0.3)' : 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = task.done ? 'var(--sage)' : 'rgba(255,255,255,0.7)'
+            }}
+          >
+            {task.done ? '↩ Undo' : '✓ Mark done'}
+          </button>
         </div>
-      )}
-
-      {/* ── Completed state ────────────────────────────────────────── */}
-      {task.done && (
-        <div style={{ padding: '10px 18px 16px' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 2, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>🧭 Guide me through this →</span>
-            </div>
-            <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(92,140,117,0.1)', border: '1px solid rgba(92,140,117,0.3)', borderRadius: 10, color: 'var(--sage)', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: 0.8 }}>
-              ✓ Completed
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </motion.div>
   )
 }

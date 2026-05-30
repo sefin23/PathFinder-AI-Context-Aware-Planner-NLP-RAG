@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getLifeEvents, deleteLifeEvent } from '../api/backend'
+import { getLifeEvents, deleteLifeEvent, updateLifeEvent } from '../api/backend'
 import { getVaultDocs } from '../api/vault'
 import { getEventVisuals } from '../api/EventSymbols'
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal'
@@ -14,7 +14,8 @@ import {
   Trophy, 
   TrendingUp, 
   FileText,
-  Check
+  Check,
+  Pencil
 } from 'lucide-react'
 
 /**
@@ -275,6 +276,7 @@ export default function SavedPlans({ onViewDetail }) {
               total={filteredPlans.length}
               onOpen={() => onViewDetail(plan)}
               onDelete={(e) => handleDeleteEvent(plan.id, plan.display_title || plan.title, e)}
+              onTitleSaved={(newTitle) => setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, display_title: newTitle } : p))}
             />
           ))}
         </div>
@@ -310,23 +312,50 @@ function _derivePlanTitle(plan) {
   return raw || 'Personal Planning Journey'
 }
 
-function HistoryCard({ plan, index, total, onOpen, onDelete }) {
-  const planTitle = _derivePlanTitle(plan)
+function HistoryCard({ plan, index, total, onOpen, onDelete, onTitleSaved }) {
+  const [localTitle, setLocalTitle] = useState(_derivePlanTitle(plan))
+  const [isEditing, setIsEditing] = useState(false)
+  const [editVal, setEditVal] = useState('')
+  const inputRef = useRef(null)
+
   // Always recalculate visuals locally to ensure latest icon mapping, fallback to saved visuals if function fails
-  const visuals = getEventVisuals(planTitle, planTitle) || plan.visuals
+  const visuals = getEventVisuals(localTitle, localTitle) || plan.visuals
   const { color, emoji, label, colorName, image } = visuals
   const isCompleted = plan.status === 'completed'
   const progress = plan.progress_pct || 0
   const eventNum = (total - index).toString().padStart(3, '0')
   const dateStr = new Date(plan.created_at).toLocaleDateString()
 
+  const startEdit = (e) => {
+    e.stopPropagation()
+    setEditVal(localTitle)
+    setIsEditing(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const saveEdit = async () => {
+    const trimmed = editVal.trim()
+    setIsEditing(false)
+    if (!trimmed || trimmed === localTitle) return
+    setLocalTitle(trimmed)
+    onTitleSaved?.(trimmed)
+    try {
+      await updateLifeEvent(plan.id, { display_title: trimmed })
+    } catch (err) {
+      console.error('Failed to rename event:', err)
+      // Revert on error
+      setLocalTitle(localTitle)
+      onTitleSaved?.(localTitle)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08 }}
-      onClick={onOpen}
-      whileHover={{ scale: 1.002, borderColor: 'rgba(255,255,255,0.15)', cursor: 'pointer' }}
+      onClick={isEditing ? undefined : onOpen}
+      whileHover={{ scale: 1.002, borderColor: 'rgba(255,255,255,0.15)', cursor: isEditing ? 'default' : 'pointer' }}
       style={{
         background: 'rgba(255,255,255,0.025)',
         backdropFilter: 'blur(24px)',
@@ -337,7 +366,7 @@ function HistoryCard({ plan, index, total, onOpen, onDelete }) {
         position: 'relative',
         overflow: 'hidden',
         boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-        cursor: 'pointer'
+        cursor: isEditing ? 'default' : 'pointer'
       }}
     >
       <div style={{ width: 6, background: color, flexShrink: 0 }} />
@@ -360,13 +389,70 @@ function HistoryCard({ plan, index, total, onOpen, onDelete }) {
           </div>
         </div>
 
-        {/* Title Block */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <h2 className="font-playfair" style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>
-            {planTitle}
-          </h2>
-          {/* Faux edit pen */}
-          <div style={{ opacity: 0.15, fontSize: 13 }}>🖋</div>
+        {/* Title Block - Inline Rename */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={editVal}
+              onChange={e => setEditVal(e.target.value)}
+              onBlur={saveEdit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveEdit()
+                if (e.key === 'Escape') setIsEditing(false)
+              }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                fontSize: 26,
+                fontWeight: 900,
+                color: 'white',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--amber)',
+                borderRadius: 8,
+                padding: '4px 12px',
+                outline: 'none',
+                fontFamily: "'DM Serif Display', serif",
+                width: '100%',
+                letterSpacing: '-0.02em'
+              }}
+            />
+          ) : (
+            <>
+              <h2 className="font-playfair" style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>
+                {localTitle}
+              </h2>
+              <button
+                onClick={startEdit}
+                title="Rename Event"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  color: 'white',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'var(--amber)'
+                  e.currentTarget.style.color = 'black'
+                  e.currentTarget.style.borderColor = 'var(--amber)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                  e.currentTarget.style.color = 'white'
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                }}
+              >
+                <Pencil size={16} />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Status Badges */}

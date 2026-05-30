@@ -76,6 +76,7 @@ class Settings:
     openrouter_api_key_secondary: str = field(default_factory=lambda: _env("OPENROUTER_API_KEY_SECONDARY"))
     nvidia_api_key: str = field(default_factory=lambda: _env("NVIDIA_API_KEY"))
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
+    anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
     # Default to Qwen3 80B MoE — high quality + low traffic = best reliability.
     # The tiered fallback in openrouter_client.py handles the rest.
     openrouter_model: str = field(default_factory=lambda: _env("OPENROUTER_MODEL", "qwen/qwen-3.6-plus:free"))

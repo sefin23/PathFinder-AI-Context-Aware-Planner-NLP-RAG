@@ -80,6 +80,25 @@ export default function EventAnalysisCard({ data, onAdd, onRemove }) {
           <p style={{ fontSize: 13, color: 'var(--fog)', lineHeight: 1.6, margin: 0, fontStyle: 'italic', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 12, borderLeft: '3px solid var(--amber)' }}>
             "{data.enriched_narrative || data.last_text || 'Synthesizing your journey details...'}"
           </p>
+          
+          {/* Proactive Vault Recognition */}
+          {data.proactive_vault_message && (
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              style={{ 
+                marginTop: 12, padding: '10px 16px', 
+                background: 'rgba(74, 222, 128, 0.05)', 
+                border: '1px solid rgba(74, 222, 128, 0.2)', 
+                borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 
+              }}
+            >
+              <Sparkles size={14} color="#4ade80" />
+              <p style={{ fontSize: 12, color: '#4ade80', margin: 0, fontWeight: 600 }}>
+                {data.proactive_vault_message}
+              </p>
+            </motion.div>
+          )}
         </div>
 
         {/* Detected events */}

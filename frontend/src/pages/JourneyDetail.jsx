@@ -15,7 +15,7 @@ import {
   CheckCircle2, Circle, Loader2, Baby, Map as MapIcon, Briefcase, Home,
   GraduationCap, Heart, HeartOff, Bird, CreditCard, Shield, Plane,
   Users, Car, Stethoscope, FileText, ChevronsRight, RefreshCw, Calendar, Zap,
-  AlertTriangle, ArrowRight
+  AlertTriangle, ArrowRight, Pencil
 } from 'lucide-react'
 import {
   getLifeEvent,
@@ -145,14 +145,88 @@ function normaliseTask(t, i, vaultMatches = [], retrievedDocs = []) {
       .map(p => ({ name: p, has: false }));
   })()
 
-  // Combine original docs, title extractions, and passed-in retrieved matches
+  // ── Inject vault documents directly as required_docs ──
+  // Two-layer approach:
+  //   Layer 1 (TRUST): The backend already ran event-level semantic matching and
+  //     returned which vault docs belong to this specific task (by task_id).
+  //     Inject these directly — no keyword re-check. This is how "I want to apply
+  //     for B.Tech" automatically surfaces SSLC + Plus Two + Aadhaar.
+  //   Layer 2 (SUPPLEMENT): Keyword-based matching for any docs the backend didn't
+  //     explicitly assign — uses tight compound-phrase keywords to avoid false positives.
+
+  const subtaskText = (t.subtasks || []).map(s => s.title || '').join(' ');
+  const taskContent = ((t.title || '') + ' ' + (t.description || '') + ' ' + subtaskText).toLowerCase();
+
+  // Layer 1: Backend-approved docs for THIS exact task (trust without re-checking)
+  const backendMatched = vaultMatches
+    .filter(m => m.task_id === t.id && m.vault_doc)
+    .map(m => {
+      let parsedFields = null;
+      try {
+        const raw = m.vault_doc?.extracted_fields;
+        if (raw) parsedFields = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch { /* ignore */ }
+      return { name: m.vault_doc.name, has: true, extracted_fields: parsedFields };
+    });
+
+  const backendMatchedNames = new Set(backendMatched.map(d => d.name.toLowerCase()));
+
+  // Layer 2: Keyword-based supplement for docs NOT already covered by backend
+  // Uses tight compound phrases only — avoids loose adjectives like 'academic', 'qualification'
+  const keywordMatched = vaultMatches.flatMap(m => {
+    const docName = (m.vault_doc?.name || m.name || '').toLowerCase();
+    if (!docName || backendMatchedNames.has(docName)) return []; // skip already-injected
+
+    const vaultDocMappings = [
+      // Educational docs — only when task names the specific document artifact
+      { docKeywords: ['sslc', 'class 10', 'tenth', '10th'], taskKeywords: ['sslc', 'class 10', '10th mark', 'marksheet', 'mark sheet', 'academic transcript', 'academic record', 'educational certificate'] },
+      { docKeywords: ['plus two', '+2', 'class 12', 'twelfth', '12th', 'higher secondary', 'hsc', 'puc'], taskKeywords: ['plus two', '+2', 'class 12', '12th mark', 'higher secondary', 'hsc', 'puc', 'marksheet', 'mark sheet', 'academic transcript', 'academic record', 'educational certificate'] },
+      { docKeywords: ['marklist', 'marksheet', 'mark sheet', 'mark list'], taskKeywords: ['marksheet', 'mark sheet', 'mark list', 'academic transcript', 'academic record', 'academic certificate'] },
+      { docKeywords: ['degree', 'diploma', 'graduation'], taskKeywords: ['degree certificate', 'diploma certificate', 'graduation certificate', 'academic record', 'educational qualification', 'academic qualification'] },
+      // Identity docs — only when task explicitly asks for id/aadhaar/kyc
+      { docKeywords: ['aadhaar', 'aadhar'], taskKeywords: ['aadhaar', 'aadhar', 'identity proof', 'id proof', 'kyc', 'address proof', 'identification'] },
+      { docKeywords: ['passport'], taskKeywords: ['passport', 'visa', 'travel document', 'overseas', 'international'] },
+      { docKeywords: ['pan card', 'pan '], taskKeywords: ['pan card', 'pan number', 'income tax', 'tax return', 'itr', 'financial document', 'tax identification'] },
+    ];
+
+    for (const mapping of vaultDocMappings) {
+      const docMatches = mapping.docKeywords.some(k => docName.includes(k));
+      const taskMatches = mapping.taskKeywords.some(k => taskContent.includes(k));
+      if (docMatches && taskMatches) {
+        let parsedFields = null;
+        try {
+          const raw = m.vault_doc?.extracted_fields;
+          if (raw) parsedFields = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch { /* ignore */ }
+        return [{ name: m.vault_doc?.name || m.name || docName, has: true, extracted_fields: parsedFields }];
+      }
+    }
+    return [];
+  });
+
+  const vaultInjected = [...backendMatched, ...keywordMatched];
+
+  // Combine original docs, title extractions, passed-in retrieved matches, and vault injections
   const mergedDocs = [
     ...(t.required_docs ?? []),
     ...extractedFromTitle,
-    ...retrievedDocs
+    ...retrievedDocs,
+    ...vaultInjected
   ].reduce((acc, current) => {
     const x = acc.find(item => item.name.toLowerCase() === current.name.toLowerCase());
     if (!x) return acc.concat([current]);
+    // If same name but one has it from vault, merge and keep the richest version
+    if (current.has && !x.has) {
+      return acc.map(item => item.name.toLowerCase() === current.name.toLowerCase()
+        ? { ...item, has: true, extracted_fields: current.extracted_fields ?? item.extracted_fields }
+        : item);
+    }
+    // Merge extracted_fields even if has-state is same
+    if (current.extracted_fields && !x.extracted_fields) {
+      return acc.map(item => item.name.toLowerCase() === current.name.toLowerCase()
+        ? { ...item, extracted_fields: current.extracted_fields }
+        : item);
+    }
     return acc;
   }, []);
 
@@ -176,10 +250,21 @@ function normaliseTask(t, i, vaultMatches = [], retrievedDocs = []) {
       suggested_due_offset_days: st.due_offset_days ?? st.suggested_due_offset_days ?? null,
       done: st.done ?? (st.status === 'completed'),
     })),
-    required_docs: mergedDocs.map(d => ({
-      ...d,
-      has: d.has || vaultMatches.some(m => (m.vault_doc?.name || '').toLowerCase().includes(d.name.toLowerCase()))
-    }))
+    required_docs: mergedDocs.map(d => {
+      const matchedVaultDoc = vaultMatches.find(m => (m.vault_doc?.name || '').toLowerCase().includes(d.name.toLowerCase()));
+      let extractedFields = d.extracted_fields ?? null;
+      if (!extractedFields && matchedVaultDoc?.vault_doc?.extracted_fields) {
+        try {
+          const raw = matchedVaultDoc.vault_doc.extracted_fields;
+          extractedFields = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch { /* ignore */ }
+      }
+      return {
+        ...d,
+        has: d.has || !!matchedVaultDoc,
+        extracted_fields: extractedFields
+      };
+    })
   }
 }
 
@@ -522,6 +607,8 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
   const dateInputRef = useRef(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [celebrated, setCelebrated] = useState({ 25: false, 50: false, 75: false, 100: false })
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [tempTitle, setTempTitle] = useState('')
   const [requirements, setRequirements] = useState(null)
   const [showDocs, setShowDocs] = useState(false) // Collapsed by default as per request
   const [docsLoading, setDocsLoading] = useState(false)
@@ -562,7 +649,9 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
     if (t.done) return 100
     const subs = t.subtasks || []
     if (!subs.length) return 0
-    return (subs.filter(s => s.done).length / subs.length) * 100
+    // Count completed subtasks proportionally: 1 of 3 done = 33%
+    const doneCount = subs.filter(s => s.done).length
+    return Math.round((doneCount / subs.length) * 100)
   }
 
   const overallProgress  = tasks.length > 0 ? Math.round(tasks.reduce((acc, t) => acc + calcTaskPct(t), 0) / tasks.length) : 0
@@ -610,7 +699,8 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
     }
   }, [tasks.length, overallProgress, isInitialised, normalisedTasks, viewMode])
 
-  const { color: eventColor, colorName: eventColorName } = useMemo(() => getEventVisuals(planTitle || ''), [planTitle])
+  const currentTitle = journey?.display_title || journey?.title || planTitle
+  const { color: eventColor, colorName: eventColorName } = useMemo(() => getEventVisuals(currentTitle || ''), [currentTitle])
 
   // Trigger celebrations (from Dashboard SOP)
   useEffect(() => {
@@ -737,6 +827,25 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
     window.addEventListener('vault_updated', handleVaultUpdated)
     return () => window.removeEventListener('vault_updated', handleVaultUpdated)
   }, [fetchJourney])
+
+  const handleTitleSave = async () => {
+    if (!tempTitle.trim() || tempTitle === (journey?.display_title || journey?.title || planTitle)) {
+      setIsEditingTitle(false)
+      return
+    }
+    try {
+      await updateLifeEvent(planId, { display_title: tempTitle })
+      setJourney(prev => ({ ...prev, display_title: tempTitle }))
+      setIsEditingTitle(false)
+      // Optional: show a micro-message
+      setMicroMsg({ text: "Title updated! ✍️", color: 'var(--amber)' })
+      setTimeout(() => setMicroMsg(null), 3000)
+    } catch (err) {
+      console.error('Failed to update title:', err)
+      setMicroMsg({ text: "Failed to update title", color: 'var(--coral)' })
+      setTimeout(() => setMicroMsg(null), 3000)
+    }
+  }
 
   // ── Task mutation handlers ─────────────────────────────────────────────
 
@@ -1122,17 +1231,18 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'space-between', 
-            padding: '10px 14px', 
+            padding: '24px 32px', 
             background: 'rgba(255,255,255,0.03)', 
-            borderRadius: 20, 
-            border: '1px solid rgba(255,255,255,0.08)', 
-            marginBottom: 24,
-            backdropFilter: 'blur(20px)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+            borderRadius: 24, 
+            border: '1px solid rgba(255,255,255,0.1)', 
+            marginBottom: 32,
+            backdropFilter: 'blur(30px)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+            position: 'relative'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
               <div style={{ 
-                width: 128, height: 128, borderRadius: 16, 
+                width: 140, height: 140, borderRadius: 16, 
                 background: 'rgba(0,0,0,0.4)', 
                 border: '1px solid rgba(255,255,255,0.1)', 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1141,22 +1251,99 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                 boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
               }}>
                 <img 
-                  src={getEventIcon(planTitle || '').image || journey?.visuals?.image} 
+                  src={getEventIcon(currentTitle || '').image || journey?.visuals?.image} 
                   alt="" 
                   loading="lazy"
-                  width={128}
-                  height={128}
+                  width={140}
+                  height={140}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <h1 className="font-playfair" style={{ fontSize: 42, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.01em' }}>{journey?.display_title || journey?.title || planTitle}</h1>
-                  <span style={{ fontSize: 10, background: 'var(--amber)', color: 'black', padding: '2px 8px', borderRadius: '4px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>SAVED</span>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+                  {isEditingTitle ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                      <input
+                        autoFocus
+                        value={tempTitle}
+                        onChange={(e) => setTempTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleTitleSave()
+                          if (e.key === 'Escape') setIsEditingTitle(false)
+                        }}
+                        onBlur={handleTitleSave}
+                        style={{
+                          fontSize: 32,
+                          fontWeight: 900,
+                          color: 'white',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid var(--amber)',
+                          borderRadius: 8,
+                          padding: '4px 12px',
+                          width: '100%',
+                          outline: 'none',
+                          fontFamily: "'DM Serif Display', serif"
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <h1 
+                        className="font-playfair" 
+                        style={{ fontSize: 36, fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.01em', lineHeight: 1.15 }}
+                      >
+                        {journey?.display_title || journey?.title || planTitle}
+                      </h1>
+                      <button
+                        onClick={() => {
+                          setTempTitle(journey?.display_title || journey?.title || planTitle)
+                          setIsEditingTitle(true)
+                        }}
+                        title="Rename Event"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          borderRadius: '50%',
+                          cursor: 'pointer',
+                          color: 'white',
+                          width: 32,
+                          height: 32,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.2s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'var(--amber)'
+                          e.currentTarget.style.color = 'black'
+                          e.currentTarget.style.borderColor = 'var(--amber)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                          e.currentTarget.style.color = 'white'
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                        }}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 
                 {(journey?.description || planDescription) && (
-                  <p style={{ fontSize: 15, color: 'var(--fog)', lineHeight: 1.5, maxWidth: 600, margin: '8px 0 0 0' }}>
+                  <p style={{ 
+                    fontSize: 15, 
+                    color: 'rgba(255,255,255,0.6)', 
+                    lineHeight: 1.5, 
+                    maxWidth: 700, 
+                    margin: '8px 0 0 0', 
+                    fontWeight: 500,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}>
                     {journey?.description || planDescription}
                   </p>
                 )}
@@ -1214,12 +1401,31 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
               </div>
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, textAlign: 'right' }}>
-              <div>
-                <p className="font-mono" style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', margin: 0 }}>{overallProgress}% COMPLETE</p>
-                <p style={{ fontSize: 16, color: 'white', fontWeight: 800, margin: 0 }}>{completedCount}/{tasks.length} Steps</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 24, flexShrink: 0 }}>
+              <span style={{ 
+                fontSize: 10, 
+                background: 'var(--amber)', 
+                color: 'black', 
+                padding: '4px 12px', 
+                borderRadius: '6px', 
+                fontWeight: 900, 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.12em',
+                boxShadow: '0 4px 15px rgba(212,124,63,0.3)'
+              }}>SAVED</span>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 32, textAlign: 'right' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <p className="font-mono" style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted)', margin: 0, opacity: 0.6, letterSpacing: '0.15em' }}>OVERALL PROGRESS</p>
+                  <p style={{ fontSize: 24, color: 'white', fontWeight: 900, margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {completedCount}<span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 500, margin: '0 4px' }}>/</span>{tasks.length}
+                    <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginLeft: 8, letterSpacing: '0.05em' }}>STEPS</span>
+                  </p>
+                </div>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ProgressRing pct={overallProgress} size={88} stroke={8} color={eventColor} />
+                </div>
               </div>
-              <ProgressRing pct={overallProgress} size={80} stroke={6} color={eventColor} />
             </div>
           </div>
 
@@ -1470,7 +1676,7 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
 
                     return (
                       <div key={group.phase} style={{ marginBottom: 32 }}>
-                        <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 24 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ fontSize: 18 }}>{emoji}</span>
                             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'white' }}>
@@ -1482,14 +1688,9 @@ export default function JourneyDetail({ planId, planTitle, planDescription, onBa
                                 }
                               })()}
                             </h3>
-                            {isAllDone ? (
+                            {isAllDone && (
                               <span style={{ background: 'rgba(92,140,117,0.15)', color: 'var(--sage)', fontSize: 8, fontWeight: 800, padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Complete</span>
-                            ) : (
-                              <span style={{ color: 'var(--amber)', fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6 }}>{pct}% Completed</span>
                             )}
-                          </div>
-                          <div style={{ paddingLeft: 28, marginTop: 2 }}>
-                            <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase' }}>{doneCount}/{group.tasks.length} TASKS</span>
                           </div>
                         </div>
                         {editMode ? (

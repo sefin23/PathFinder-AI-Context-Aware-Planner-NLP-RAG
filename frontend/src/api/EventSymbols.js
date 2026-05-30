@@ -97,6 +97,18 @@ export const getEventVisuals = (title = '', displayTitle = '', category = null) 
   else if (has('MARRIAGE', 'WEDDING', 'RELATIONSHIP', 'ENGAGEMENT', 'ANNIVERSARY', 'HONEYMOON', 'CEREMONY', 'VOWS', 'BRIDE', 'GROOM')) {
     image = '/images/events/marriage_planning_min.png'; color = 'var(--amber)'; emoji = '💍'; label = 'Marriage'; colorName = 'amber'
   }
+  // 18. Family & Eldercare (Sage)
+  else if (has('FAMILY', 'PARENT', 'CHILD', 'RELATIVE', 'SIBLING', 'GUARDIAN', 'CAREGIV', 'ELDER', 'SENIOR')) {
+    if (has('BABY', 'PARENTING', 'INFANT')) image = '/images/events/parenting_care_min.png';
+    else image = '/images/events/family_relations_min.png';
+    color = 'var(--sage)'; emoji = '👪'; label = 'Family'; colorName = 'sage'
+  }
+  // 13. Medical / Health / Doctor (Coral)
+  else if (has('MEDICAL', 'SURGERY', 'DOCTOR', 'HOSPITAL', 'CLINIC', 'PHYSICAL', 'DENTIST', 'CRISIS', 'HEALTH', 'DISABIL', 'MENTAL', 'THERAPY', 'COUNSEL', 'WELLBEING', 'WELLNESS', 'PRESCR', 'MEDICAT', 'DIAGNOS', 'TREATMENT', 'REHAB', 'RECOVER')) {
+    if (has('DISABIL', 'LONG TERM')) image = '/images/events/health_disability_min.png';
+    else image = '/images/events/medical_emergency_min.png';
+    color = 'var(--coral)'; emoji = '🏥'; label = 'Medical'; colorName = 'coral'
+  }
   // 9. Finance / Money / Banking / Wealth (Emerald)
   else if (has('MONEY', 'FINANCE', 'FINANCIAL', 'FISCAL', 'DEBT', 'INVEST', 'INVESTOR', 'FUNDING', 'FUNDRAIS', 'TAX', 'SAVINGS', 'BANK', 'PAYMENT', 'ACCOUNT', 'BUDGET', 'REVENUE', 'ASSET', 'DISCIPLINE', 'CAPITAL', 'FUND', 'EQUITY', 'CASH', 'CREDIT', 'LOAN', 'PROFIT', 'COST', 'BOOKKEEP', 'ACCOUNTING', 'PAYROLL', 'WEALTH', 'VALUAT', 'EXPENDITURE', 'INSUR', 'PENSION', 'SUBSID', 'GRANT', 'STIPEND', 'COMPENSAT', 'SALARY', 'INCOME', 'EARNING', 'PRICING', 'MONETIZ')) {
     image = '/images/events/money_assets_min.png'; color = 'var(--emerald)'; emoji = '💰'; label = 'Finance'; colorName = 'emerald'
@@ -120,12 +132,7 @@ export const getEventVisuals = (title = '', displayTitle = '', category = null) 
   else if (has('VEHICLE', 'CAR ', 'BOAT', 'BIKE', 'AUTOMOBILE', 'DRIVE', 'MOTORCYCL', 'TRUCK', 'TRANSPORT')) {
     image = '/images/events/vehicle_purchase_min.png'; color = 'var(--amber)'; emoji = '🚗'; label = 'Vehicle'; colorName = 'amber'
   }
-  // 13. Medical / Health / Doctor (Coral)
-  else if (has('MEDICAL', 'SURGERY', 'DOCTOR', 'HOSPITAL', 'CLINIC', 'PHYSICAL', 'DENTIST', 'CRISIS', 'HEALTH', 'DISABIL', 'MENTAL', 'THERAPY', 'COUNSEL', 'WELLBEING', 'WELLNESS', 'PRESCR', 'MEDICAT', 'DIAGNOS', 'TREATMENT', 'REHAB', 'RECOVER')) {
-    if (has('DISABIL', 'LONG TERM')) image = '/images/events/health_disability_min.png';
-    else image = '/images/events/medical_emergency_min.png';
-    color = 'var(--coral)'; emoji = '🏥'; label = 'Medical'; colorName = 'coral'
-  }
+
   // 14. Event / Party (Amber)
   else if (has('EVENT', 'PARTY', 'CELEBRAT', 'FESTIVAL', 'GATHERING', 'CONFERENCE', 'SEMINAR', 'WORKSHOP', 'SUMMIT')) {
     image = '/images/events/event_planning_min.png'; color = 'var(--amber)'; emoji = '🎉'; label = 'Event'; colorName = 'amber'
@@ -145,12 +152,7 @@ export const getEventVisuals = (title = '', displayTitle = '', category = null) 
   else if (has('GROWTH', 'HABIT', 'SELF', 'PERSONAL', 'DEVELOP', 'IMPROVE', 'GOAL', 'MOTIVAT', 'PRODUCTIV', 'ROUTINE', 'DISCIPL', 'MINDSET', 'SKILL')) {
     image = '/images/events/personal_growth_min.png'; color = 'var(--sage)'; emoji = '🌱'; label = 'Growth'; colorName = 'sage'
   }
-  // 18. Family (Sage)
-  else if (has('FAMILY', 'PARENT', 'CHILD', 'RELATIVE', 'SIBLING', 'GUARDIAN', 'CAREGIV')) {
-    if (has('BABY', 'PARENTING', 'INFANT')) image = '/images/events/parenting_care_min.png';
-    else image = '/images/events/family_relations_min.png';
-    color = 'var(--sage)'; emoji = '👪'; label = 'Family'; colorName = 'sage'
-  }
+
 
   // 19. Lifecycle / Universal Phases — lower priority than specific events
   else if (has('REQUIREMENT', 'UNDERSTAND', 'RESEARCH', 'PLANNING', 'ANALY', 'PREP', 'GATHER', 'ASSESS', 'AUDIT', 'SURVEY', 'OVERVIEW', 'ORIENTAT', 'DISCOVER', 'EVALUAT', 'REVIEW', 'CHECKLIST')) {

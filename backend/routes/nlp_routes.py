@@ -22,6 +22,9 @@ from backend.schemas.nlp_schema import (
 from backend.services.nlp_service import classify_life_event
 from backend.database import get_db
 
+from backend.routes.auth_routes import get_current_user
+from backend.models.user_model import User
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -41,16 +44,26 @@ router = APIRouter()
 def analyze_life_event(
     body: LifeEventAnalyzeRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LifeEventAnalyzeResponse:
     """
     POST /life-events/analyze
 
     - Calls Gemini for structured life-event classification.
     - Returns JSON only; nothing is persisted.
+    - Proactively identifies relevant documents from the user's vault.
     - Confidence < 0.6 is flagged in the response message.
     """
     try:
-        classification = classify_life_event(db, body.text, skip_clarification=body.skip_clarification)
+        # Fetch vault document names for proactive awareness
+        vault_inventory = [doc.name for doc in current_user.vault_documents]
+        
+        classification = classify_life_event(
+            db, 
+            body.text, 
+            skip_clarification=body.skip_clarification,
+            vault_inventory=vault_inventory
+        )
     except RuntimeError as exc:
         logger.error("NLP service error: %s", exc)
         raise HTTPException(

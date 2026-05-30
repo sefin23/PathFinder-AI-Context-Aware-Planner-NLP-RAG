@@ -151,6 +151,10 @@ class LifeEventClassification(BaseModel):
         default_factory=list,
         description="Specific pieces of information required for a high-quality roadmap."
     )
+    proactive_vault_message: Optional[str] = Field(
+        None,
+        description="A message acknowledging existing documents in the vault that are relevant to this event."
+    )
 
     @field_validator("life_event_types")
     @classmethod

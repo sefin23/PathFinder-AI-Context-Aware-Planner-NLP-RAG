@@ -9,8 +9,26 @@ logger = logging.getLogger(__name__)
 
 def analyze_document_vision(file_path: str) -> Dict[str, str]:
     """
-    Uses Gemini Vision to identify a document and return a suggested name and category.
+    Uses Gemini Vision to identify a document. Checks local demo_cache.json first.
     """
+    # ── DEMO GUARD CACHE ──────────────────────────────────────────────────────
+    try:
+        import json
+        file_name = os.path.basename(file_path).lower()
+        cache_path = os.path.join(os.path.dirname(__file__), "..", "demo_cache.json")
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as f:
+                cache = json.load(f)
+                # Check for exact name match (e.g. 'aadhaar card.pdf')
+                if file_name in cache:
+                    logger.info(f"DEMO GUARD: Using cached extraction for {file_name}")
+                    return cache[file_name]
+                # Fallback: check if the original display name is in the cache 
+                # (e.g. if the file was renamed in the DB but is one of our demo docs)
+    except Exception as cache_err:
+        logger.warning(f"Demo cache check failed: {cache_err}")
+    # ──────────────────────────────────────────────────────────────────────────
+
     if not settings.gemini_api_key:
         logger.warning("GEMINI_API_KEY not set, skipping vision scan.")
         return {}
@@ -62,20 +80,37 @@ def analyze_document_vision(file_path: str) -> Dict[str, str]:
         - Provide a "confidence" score (0-1).
         """
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                types.Content(
-                    parts=[
-                        types.Part.from_bytes(data=image_data, mime_type=mime_type),
-                        types.Part.from_text(text=prompt)
-                    ]
+        # Try models in order — each has its own free-tier quota bucket:
+        # flash-lite: low cost, fast, handles PDFs well
+        # 2.5-flash: higher intelligence if flash-lite quota is also exhausted
+        VISION_MODELS = ["gemini-2.0-flash-lite", "gemini-2.5-flash"]
+        response = None
+        last_err = None
+        for model_name in VISION_MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Content(
+                            parts=[
+                                types.Part.from_bytes(data=image_data, mime_type=mime_type),
+                                types.Part.from_text(text=prompt)
+                            ]
+                        )
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
-            )
-        )
+                logger.info(f"Vision extraction succeeded with model: {model_name}")
+                break  # success — stop trying
+            except Exception as model_err:
+                logger.warning(f"Vision model {model_name} failed: {model_err}")
+                last_err = model_err
+                continue
+
+        if response is None:
+            raise last_err or RuntimeError("All vision models failed")
 
         import json
         result = json.loads(response.text)

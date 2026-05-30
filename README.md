@@ -14,7 +14,7 @@ Most life situations don't come with instructions. You type _"I'm finishing coll
 - 🧠 **Context-Aware Planning** — understands vague natural language input, not rigid forms. Covers 10 life domains: Housing, Work, Education, Health, Family, Finance, Legal, Parenting, Loss, and Personal Growth.
 - ❓ **Smart Clarification** — asks follow-up questions so that it makes sure the system has the required information and it does not hallucinate while giving the answer.
 - ✅ **User-Controlled Approval** — AI proposes a full workflow before anything is saved. The user reviews, modifies, or rejects it. No irreversible actions without explicit approval.
-- 🗺️ **Guide Me** — walks the user through any task step-by-step, automatically finding the right official links, checking their uploaded documents, and pre-filling personal details.
+- 🗺️ **Guide Me** — walks the user through any task step-by-step, automatically finding the right official links, checking their uploaded documents, pre-filling personal details, and displaying **High-Fidelity Interactive Explainers** (lightweight spring-animated cursor overlays on real screenshots to guide users through the initial form or login steps of 8 key portals like MCA, GST, and Aadhaar).
 - 💬 **Ask Your Plan** — a context-aware floating chatbot that understands the user's specific tasks, uploaded documents, and local city/state rules.
 - 📄 **Document Vault** — securely stores files and automatically reads information from them, pre-filling event requirements so the user never re-enters the same details twice.
 - 📅 **Daily Planner** — lets users input personal schedules so the system detects clashes and reschedules tasks accordingly.
@@ -41,6 +41,7 @@ Most life situations don't come with instructions. You type _"I'm finishing coll
 ## Documentation
 
 - [Brand Identity & Design System](docs/branding/BRAND_GUIDE.md) — the visual language, color palette, and 3D asset library
+- [Interactive Portal Explainers](docs/explainers/) — real-world screenshots of key government/corporate portals mapped with absolute cursor coordinates for live demonstrations
 - [Life Events Library & Use Cases](LIFE_EVENTS_LIBRARY.md) — the 10 life event domains covered, real-world use cases, and target audience breakdown
 - [Backend README](backend/README.md) — tech stack with reasoning, AI pipeline overview, and setup instructions
 - [Frontend README](frontend/README.md) — frontend tech stack with reasoning and folder structure

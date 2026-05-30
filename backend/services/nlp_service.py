@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.config import settings
 from backend.schemas.nlp_schema import LifeEventClassification, LifeEventType
 from backend.services.openrouter_client import generate_completion as openrouter_generate, OpenRouterError
+from backend.services.anthropic_client import generate_anthropic_completion as anthropic_generate, AnthropicError
 from backend.services.clarification_engine import generate_clarification_questions
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,10 @@ Your ONLY job is to analyse the user's text and return a valid JSON object with 
 - confidence: number (0.0 to 1.0).
 - is_highly_detailed: boolean — Set to TRUE only if the user has provided a VERY detailed brief (including industry, current stage, budget, and specific goals). Set to FALSE for short prompts like 'Starting a business' or 'Moving to Dubai'.
 - missing_strategic_details: array of strings — Identify 3-4 specific pieces of information we still need to build a perfect roadmap.
+- proactive_vault_message: string or null — If the user's vault inventory contains documents that seem relevant to this event (e.g. they have an Aadhaar card for a legal process, or a marklist for college enrollment), provide a brief, proactive message acknowledging them (e.g. "I've spotted your Aadhaar and marklists in the vault—I'll pre-fill those for you!"). If no relevant docs match, return null.
+
+VAULT INVENTORY (Existing documents the user has already uploaded):
+{{VAULT_INVENTORY}}
 
 Rules:
 - SOCRATIC DEFAULT: Always assume the prompt is NOT highly detailed unless it is massive and specific (100+ words).
@@ -45,20 +50,38 @@ Rules:
 """
 
 
-def _call_with_fallback(user_message: str) -> str:
+def _call_with_fallback(user_message: str, vault_inventory: list[str] = None) -> str:
     """
-    Calls OpenRouter (which now handles its own fallbacks and direct Gemini failover).
+    Calls Anthropic directly if key is present (Primary), 
+    otherwise falls back to OpenRouter.
     """
+    vault_str = ", ".join(vault_inventory) if vault_inventory else "No documents in vault yet."
+    final_system_prompt = _SYSTEM_PROMPT.replace("{{VAULT_INVENTORY}}", vault_str)
+    
+    # TIER 1: Direct Anthropic (The user's $5 priority)
+    if settings.anthropic_api_key:
+        try:
+            return anthropic_generate(
+                model="claude-sonnet-4-6",
+                system_instruction=final_system_prompt,
+                user_message=user_message,
+                max_tokens=1024,
+                temperature=0.2,
+            )
+        except AnthropicError as e:
+            logger.warning(f"Anthropic direct failed, falling back to OpenRouter: {e}")
+
+    # TIER 2: OpenRouter (Existing fallback stack)
     return openrouter_generate(
         model=settings.openrouter_model,
-        system_instruction=_SYSTEM_PROMPT,
+        system_instruction=final_system_prompt,
         user_message=user_message,
-        max_tokens=512,
+        max_tokens=1024,
         temperature=0.2,
     )
 
 
-def classify_life_event(db: Session, text: str, skip_clarification: bool = False) -> LifeEventClassification | dict:
+def classify_life_event(db: Session, text: str, skip_clarification: bool = False, vault_inventory: list[str] = None) -> LifeEventClassification | dict:
     """
     Send *text* to OpenRouter and return a validated LifeEventClassification.
     Or, if confidence is too low, return a dictionary containing clarification questions.
@@ -77,14 +100,14 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
     Raises:
         RuntimeError: If API key is missing or all models fail at the network level.
     """
-    if not settings.openrouter_api_key:
+    if not settings.openrouter_api_key and not settings.anthropic_api_key:
         raise RuntimeError(
-            "OPENROUTER_API_KEY is not set. "
-            "Add it to your .env file and restart the server."
+            "Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY is set. "
+            "Add at least one to your .env file and restart the server."
         )
 
     try:
-        raw_text = _call_with_fallback(text)
+        raw_text = _call_with_fallback(text, vault_inventory)
         logger.debug("OpenRouter classification response: %s", raw_text)
 
         # Strip markdown fences if the model added them despite instructions
@@ -125,6 +148,7 @@ def classify_life_event(db: Session, text: str, skip_clarification: bool = False
             confidence=conf,
             is_highly_detailed=bool(data.get("is_highly_detailed", False)),
             missing_strategic_details=data.get("missing_strategic_details", []),
+            proactive_vault_message=data.get("proactive_vault_message"),
         )
 
         # ── Layer 3.5: Correction Layer (Sniffer Fallback) ────────────────
@@ -477,6 +501,25 @@ def suggest_task_match(doc_summary: str, pending_tasks: list) -> Optional[int]:
     """
     
     try:
+        # Check Anthropic first
+        if settings.anthropic_api_key:
+            try:
+                from backend.services.anthropic_client import generate_anthropic_completion as anthropic_generate
+                response = anthropic_generate(
+                    model="claude-sonnet-4-6",
+                    system_instruction="You are a precise task-matching assistant.",
+                    user_message=prompt,
+                    max_tokens=64,
+                    temperature=0.1
+                )
+                resp_text = response.strip().lower().replace("id", "").replace(":", "").strip()
+                if 'null' in resp_text:
+                    return None
+                return int(resp_text)
+            except Exception as e:
+                logger.warning(f"Anthropic task matching failed: {e}")
+
+        # Fallback to OpenRouter
         from backend.services.openrouter_client import generate_completion as openrouter_generate
         response = openrouter_generate(
             model=settings.openrouter_model,

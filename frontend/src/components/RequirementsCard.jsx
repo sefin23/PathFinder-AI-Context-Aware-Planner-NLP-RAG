@@ -288,25 +288,27 @@ function CategoryRow({ category, items, isLast, collectedIds, onToggleDoc, index
               <strong style={{ color: 'white', display: 'block', marginBottom: '8px', fontSize: '15px' }}>{items[activeId].title}</strong>
               <div dangerouslySetInnerHTML={{ __html: (items[activeId].content || '').replace(/\*\*(.*?)\*\*/g, '<strong style="color: white; font-weight: 700;">$1</strong>') }} />
               
-              {/* Actionable Links for Documents */}
-              <div style={{ display: 'flex', gap: 12, marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <button 
-                  onClick={() => window.open(items[activeId].portal_url || `https://www.google.com/search?q=official+portal+for+${encodeURIComponent(items[activeId].title)}`, '_blank')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: 8, color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                >
-                  <ExternalLink size={14} /> Official Portal
-                </button>
-                <button 
-                  onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(items[activeId].title)}+form+pdf+download`, '_blank')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: 8, color: 'var(--muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <Download size={14} /> Forms
-                </button>
-              </div>
+              {/* Actionable Links for Documents - Hide for Mistakes/Tips */}
+              {category.id !== 'mistakes' && (
+                <div style={{ display: 'flex', gap: 12, marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <button 
+                    onClick={() => window.open(items[activeId].portal_url || `https://www.google.com/search?q=official+portal+for+${encodeURIComponent(items[activeId].title)}`, '_blank')}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: 8, color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                  >
+                    <ExternalLink size={14} /> Official Portal
+                  </button>
+                  <button 
+                    onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(items[activeId].title)}+form+pdf+download`, '_blank')}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: 8, color: 'var(--muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <Download size={14} /> Forms
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

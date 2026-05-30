@@ -17,7 +17,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Go to the official UIDAI page",
                 "description": "Open myaadhaar.uidai.gov.in — make sure it's the .gov.in domain. Don't use any third-party sites.",
-                "action": {"type": "link", "label": "Open UIDAI page →", "url": "https://myaadhaar.uidai.gov.in/genricDownloadAadhaar/en"}
+                "action": {"type": "link", "label": "Open UIDAI page →", "url": "https://myaadhaar.uidai.gov.in/genricDownloadAadhaar/en"},
+                "explainer_type": "uidai_aadhaar_download"
             },
             {
                 "num": 2, "title": "Enter your Aadhaar number",
@@ -54,7 +55,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Open the Protean e-PAN portal",
                 "description": "This is the official Protean (formerly NSDL) page for downloading your PAN card.",
-                "action": {"type": "link", "label": "Open Protean portal →", "url": "https://onlineservices.proteantech.in/paam/requestAndDownloadEPAN.html"}
+                "action": {"type": "link", "label": "Open Protean portal →", "url": "https://onlineservices.proteantech.in/paam/requestAndDownloadEPAN.html"},
+                "explainer_type": "pan_download"
             },
             {
                 "num": 2, "title": "Enter your PAN and Aadhaar number",
@@ -164,7 +166,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Login with UAN and password",
                 "description": "Go to the EPFO Unified Member Portal. Use your UAN found in your offer letter or salary slip.",
-                "action": {"type": "copy", "label": "Copy UAN", "value_key": "uan_number"}
+                "action": {"type": "copy", "label": "Copy UAN", "value_key": "uan_number"},
+                "explainer_type": "epfo_pf_transfer"
             },
             {
                 "num": 2, "title": "Go to Online Services → Transfer Request",
@@ -270,7 +273,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Register on Passport Seva Portal",
                 "description": "Create an account on the official Passport Seva portal if you don't have one.",
-                "action": {"type": "link", "label": "Open Passport Seva →", "url": "https://www.passportindia.gov.in/"}
+                "action": {"type": "link", "label": "Open Passport Seva →", "url": "https://services1.passportindia.gov.in/forms/registration"},
+                "explainer_type": "passport_seva"
             },
             {
                 "num": 2, "title": "Apply for Fresh or Re-issue",
@@ -344,7 +348,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Ensure UAN is seeded with Aadhaar and Bank",
                 "description": "Before claiming, your UAN must be linked with Aadhaar, PAN, and bank account details for instant credit.",
-                "action": {"type": "link", "label": "Open EPFO portal →", "url": "https://unifiedportal-mem.epfindia.gov.in/memberinterface/"}
+                "action": {"type": "link", "label": "Open EPFO portal →", "url": "https://unifiedportal-mem.epfindia.gov.in/memberinterface/"},
+                "explainer_type": "epfo_pf_transfer"
             },
             {
                 "num": 2, "title": "Go to Online Services → Claim",
@@ -412,7 +417,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Register business name",
                 "description": "Search for name availability on MCA portal. Reserve your chosen business name before it's taken by someone else.",
-                "action": {"type": "link", "label": "Open MCA name search →", "url": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"}
+                "action": {"type": "link", "label": "Open MCA name search →", "url": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"},
+                "explainer_type": "mca_name_check"
             },
             {
                 "num": 2, "title": "Obtain business registration number",
@@ -449,7 +455,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Search for name availability",
                 "description": "Enter your proposed business name on the MCA portal. Check if it's already registered or too similar to existing companies.",
-                "action": {"type": "link", "label": "Check name availability →", "url": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"}
+                "action": {"type": "link", "label": "Check name availability →", "url": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html"},
+                "explainer_type": "mca_name_check"
             },
             {
                 "num": 2, "title": "Prepare 2-3 name alternatives",
@@ -486,7 +493,8 @@ GUIDES = [
             {
                 "num": 1, "title": "Complete Part A of SPICe+ form",
                 "description": "Fill company details: registered office address, authorized capital, directors' KYC. Use the approved business name from previous step.",
-                "action": {"type": "link", "label": "Open SPICe+ form →", "url": "https://www.mca.gov.in/content/mca/global/en/services/company-registration.html"}
+                "action": {"type": "link", "label": "Open SPICe+ form →", "url": "https://www.mca.gov.in/content/mca/global/en/services/company-registration.html"},
+                "explainer_type": "mca_name_check"
             },
             {
                 "num": 2, "title": "Complete Part B - Tax registrations",

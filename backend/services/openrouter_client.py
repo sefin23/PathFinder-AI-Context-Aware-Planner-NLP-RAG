@@ -38,6 +38,7 @@ import time
 import requests
 
 from backend.config import settings
+from backend.services.anthropic_client import generate_anthropic_completion as anthropic_generate, AnthropicError
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,32 @@ def generate_completion(
     if cached:
         logger.info("AI CACHE HIT — returning persisted response (no API call)")
         return cached
+
+    # ── TIER 0: Direct Anthropic (Primary Intelligence) ───────────────────
+    # The absolute highest quality model, prioritized above all free tiers.
+    if settings.anthropic_api_key:
+        try:
+            logger.info("Anthropic Tier 0 attempt: claude-sonnet-4-6")
+            # Auto-detect JSON requirement for Claude prefill
+            is_json = "JSON" in system_instruction.upper()
+            
+            a_text = anthropic_generate(
+                model="claude-sonnet-4-6",
+                system_instruction=system_instruction,
+                user_message=user_message,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                json_mode=is_json
+            )
+            if a_text and a_text.strip():
+                logger.info("Anthropic SUCCESS: claude-sonnet-4-6")
+                result = a_text.strip()
+                _set_cached(ck, result)
+                return result
+        except AnthropicError as e:
+            logger.warning(f"Anthropic Tier 0 failed, continuing to fallbacks: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected Anthropic error: {e}")
 
     # ── TIER 0a: Groq (Fastest — LPU hardware, dedicated quota) ───────────
     # Free tier: 14,400 req/day, 30 req/min. ~200+ tokens/sec on LPU.

@@ -11,6 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { Clipboard, Check, X, Upload } from 'lucide-react'
+import InteractiveExplainer from './InteractiveExplainer'
 
 // Inline styles matching guide-me-brief.html exactly
 const S = {
@@ -459,7 +460,64 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
     task?.description ||
     'Strategic guidance to help you complete this task quickly and correctly.'
 
-  // Pre-fill data: use backend data if available, else derive from task
+  // ── Pre-fill data builder ─────────────────────────────────────────────────────
+  // Priority: backend AI guide prefilled → guide required_docs → task required_docs
+  // For vault docs: expand extracted_fields into individual copyable rows (name, DOB, etc.)
+
+  // Human-readable labels for extracted field keys
+  const FIELD_LABELS = {
+    full_name: 'Full Name',
+    dob: 'Date of Birth',
+    reference_id: 'Reference / ID No.',
+    company_name: 'Company Name',
+    joining_date: 'Joining Date',
+    designation: 'Role / Designation',
+    employee_id: 'Employee ID',
+    salary_monthly: 'Monthly Salary',
+    bank_name: 'Bank Name',
+    account_last_4: 'Account (last 4)',
+    ifsc_code: 'IFSC Code',
+    pan_number: 'PAN Number',
+    aadhaar_number: 'Aadhaar Number',
+    father_name: "Father's Name",
+    permanent_address: 'Permanent Address',
+    gender: 'Gender',
+  }
+
+  // Fields we skip — either classification metadata or not useful for copy-paste
+  // extra_context: long sentence like "This doc proves..." — not copyable
+  // work_location/state: extracted from edu docs as "Kerala" which is noise
+  const SKIP_FIELDS = new Set([
+    'category', 'suggested_name', 'confidence', 'document_date',
+    'state_code', 'metadata', 'locations', 'dates',
+    'extra_context', 'work_location', 'state',
+  ])
+
+  function expandVaultDoc(doc) {
+    const rows = []
+    const fields = doc.extracted_fields
+    if (fields && typeof fields === 'object') {
+      for (const [key, val] of Object.entries(fields)) {
+        if (SKIP_FIELDS.has(key) || !val || val === 'null') continue
+        rows.push({
+          label: FIELD_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          value: String(val),
+          source: 'vault',
+          docName: doc.name,
+        })
+      }
+    }
+    // If no extracted fields, fall back to showing the document as available
+    if (rows.length === 0) {
+      rows.push({
+        label: doc.name,
+        value: 'AVAILABLE',
+        source: doc.has ? 'vault' : 'missing',
+      })
+    }
+    return rows
+  }
+
   let prefills = []
   if (guide?.prefilled?.length > 0) {
     prefills = guide.prefilled.map((f) => ({
@@ -471,20 +529,31 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
           : 'profile'
         : 'missing',
     }))
-  } else if (guide?.required_docs?.length > 0) {
-    prefills = guide.required_docs.map((d) => ({
-      label: d.name,
-      value: d.has ? 'AVAILABLE' : 'REQUIRED',
-      source: d.has ? 'vault' : 'missing',
-    }))
-  } else if (task?.required_docs?.length > 0) {
-    prefills = task.required_docs.map((d) => ({
-      label: d.name,
-      value: d.has ? 'AVAILABLE' : 'REQUIRED',
-      source: d.has ? 'vault' : 'missing',
-      raw: d.has ? d.vault_value : null // Add value if available
-    }))
+  } else {
+    // Merge guide.required_docs and task.required_docs (task takes priority if extracted_fields present)
+    const sourceDocs = guide?.required_docs?.length > 0 ? guide.required_docs : (task?.required_docs ?? [])
+    const rawRows = sourceDocs.flatMap((d) => {
+      if (d.has && d.extracted_fields) {
+        return expandVaultDoc(d)
+      }
+      return [{
+        label: d.name,
+        value: d.has ? 'AVAILABLE' : 'REQUIRED',
+        source: d.has ? 'vault' : 'missing',
+      }]
+    })
+
+    // Deduplicate: if the same label+value appears from multiple docs, keep only the first.
+    // Doc-specific fields (like reference_id, permanent_address) will differ per doc so they're kept.
+    const seen = new Set()
+    prefills = rawRows.filter(row => {
+      const key = row.label + '||' + row.value
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   }
+
 
   // Fetch guide data
   useEffect(() => {
@@ -541,11 +610,17 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
           const matchedAiIndices = new Set()
 
           const steps = task.subtasks.map((s) => {
+            const finalDesc = s.description || getSubtaskHint(s.title);
+            const fallbackExplainer = (/proposed.*name|name.*avail/i.test(s.title) && /mca/i.test(s.title + ' ' + finalDesc))
+              ? 'mca_name_check'
+              : null;
+
             if (!aiSteps.length) {
               return {
                 title: s.title,
-                description: s.description || getSubtaskHint(s.title),
-                action: getSmartLink(s.title),
+                description: finalDesc,
+                action: getSmartLink(s.title, finalDesc),
+                explainer_type: fallbackExplainer,
               }
             }
             const subtaskTitleWords = new Set(s.title.toLowerCase().match(/\w{4,}/g) ?? [])
@@ -561,11 +636,15 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
             })
             const matched = bestScore >= 3 ? aiSteps[bestIdx] : null
             if (matched) matchedAiIndices.add(bestIdx)
-            const finalDesc = s.description || matched?.description || getSubtaskHint(s.title);
+            const resolvedDesc = s.description || matched?.description || getSubtaskHint(s.title);
+            const finalFallback = (/proposed.*name|name.*avail/i.test(s.title) && /mca/i.test(s.title + ' ' + resolvedDesc))
+              ? 'mca_name_check'
+              : null;
             return {
               title: s.title,
-              description: finalDesc,
-              action: matched?.action ?? getSmartLink(s.title, finalDesc),
+              description: resolvedDesc,
+              action: matched?.action ?? getSmartLink(s.title, resolvedDesc),
+              explainer_type: matched?.explainer_type ?? finalFallback ?? null,
             }
           })
 
@@ -590,7 +669,11 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
             expected_result: data?.expected_result,
             what_to_save: data?.what_to_save,
           })
-          setStepStates([...task.subtasks.map(s => s.done ? 'done' : 'todo'), ...extraSteps.map(() => 'todo')])
+          // Mark the first incomplete subtask as 'active' so the explainer widget renders immediately
+          const subtaskInitStates = task.subtasks.map(s => s.done ? 'done' : 'todo')
+          const firstTodoIdx = subtaskInitStates.indexOf('todo')
+          if (firstTodoIdx !== -1) subtaskInitStates[firstTodoIdx] = 'active'
+          setStepStates([...subtaskInitStates, ...extraSteps.map(() => 'todo')])
 
         } else if (data?.has_guide) {
           // No subtasks — use AI steps directly (nothing to sync)
@@ -622,10 +705,17 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
           setGuide({
             title: task.title,
             intro: task.description,
-            steps: task.subtasks.map((s) => ({
-              title: s.title,
-              description: s.description || 'Complete this step to progress the task.',
-            })),
+            steps: task.subtasks.map((s) => {
+              const d = s.description || 'Complete this step to progress the task.';
+              const fallbackExplainer = (/proposed.*name|name.*avail/i.test(s.title) && /mca/i.test(s.title + ' ' + d))
+                ? 'mca_name_check'
+                : null;
+              return {
+                title: s.title,
+                description: d,
+                explainer_type: fallbackExplainer,
+              }
+            }),
             has_guide: true,
           })
           setStepStates([...task.subtasks.map(s => s.done ? 'done' : 'todo'), ...extraSteps.map(() => 'todo')])
@@ -666,12 +756,11 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
     })
   }
 
-  // Progress: use real subtask completion when subtasks exist, otherwise guide step progress
-  const subtasks = task?.subtasks ?? []
-  const subtaskDoneCount = subtasks.filter(s => s.done).length
-  const hasRealSubtasks = subtasks.length > 0
-  const doneCount = hasRealSubtasks ? subtaskDoneCount : stepStates.filter((s) => s === 'done').length
-  const totalCount = hasRealSubtasks ? subtasks.length : stepStates.length
+  // Progress: always use stepStates since it updates synchronously on every click.
+  // task.subtasks is a prop that only refreshes after the async API round-trip,
+  // causing the bar to appear frozen until the network call completes.
+  const doneCount  = stepStates.filter(s => s === 'done').length
+  const totalCount = stepStates.length
   const progressPct = totalCount ? (doneCount / totalCount) * 100 : 0
 
   return createPortal(
@@ -750,21 +839,49 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
                     <span style={S.prefillStar}>✦</span>
                     <span style={S.prefillTitle}>PathFinder knows these — no need to look them up</span>
                   </div>
-                  <div style={S.prefillSub}>Details from your vault and profile, pre-filled for this task.</div>
+                  <div style={S.prefillSub}>Extracted from your vault documents — click copy to use anywhere.</div>
                   <div>
                     {prefills.map((row, i) => (
                       <div key={i} style={S.prefillField}>
+                        {/* Label */}
                         <span style={S.pfLabel}>{row.label}</span>
+
+                        {/* Value */}
                         <span
                           style={{
                             ...S.pfValue,
-                            color: row.source === 'missing' ? 'rgba(255, 255, 255, 0.2)' : '#f7f4ee',
+                            color: row.source === 'missing'
+                              ? 'rgba(255, 255, 255, 0.2)'
+                              : row.value === 'AVAILABLE'
+                                ? 'rgba(255,255,255,0.38)'
+                                : '#f7f4ee',
+                            fontStyle: row.value === 'AVAILABLE' ? 'italic' : 'normal',
+                            fontSize: row.value === 'AVAILABLE' ? 10 : 11,
                           }}
                         >
-                          {row.value}
+                          {row.value === 'AVAILABLE' ? (row.docName || 'In vault') : row.value}
                         </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {row.source === 'missing' ? (
+
+                        {/* Action area */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+
+                          {/* Source chip */}
+                          {row.source !== 'missing' && (
+                            <div style={{
+                              ...S.pfSource,
+                              background: 'rgba(92, 140, 117, 0.12)',
+                              border: '1px solid rgba(92, 140, 117, 0.25)',
+                              color: '#5c8c75',
+                              textTransform: 'uppercase',
+                              fontWeight: 800,
+                              fontSize: 8,
+                            }}>
+                              {row.docName ? '📄 ' + row.docName.split('.')[0].slice(0, 14) : 'from vault'}
+                            </div>
+                          )}
+
+                          {/* Upload button (missing docs) */}
+                          {row.source === 'missing' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -788,53 +905,38 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
                             >
                               <Upload size={12} /> Upload
                             </button>
-                          ) : (
-                            <div
-                              style={{
-                                ...S.pfSource,
-                                ...(row.source === 'vault'
-                                  ? {
-                                      background: 'rgba(92, 140, 117, 0.12)',
-                                      border: '1px solid rgba(92, 140, 117, 0.25)',
-                                      color: '#5c8c75',
-                                    }
-                                  : {
-                                      background: 'rgba(212, 124, 63, 0.1)',
-                                      border: '1px solid rgba(212, 124, 63, 0.22)',
-                                      color: '#f0a96b',
-                                    }),
-                                textTransform: 'uppercase',
-                                fontWeight: 800
-                              }}
-                            >
-                              from {row.source}
-                            </div>
                           )}
 
+                          {/* Copy button — shown for any real extracted value */}
                           {row.source !== 'missing' && row.value && row.value !== 'AVAILABLE' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 copyText('req-' + i, row.value);
                               }}
+                              title={`Copy ${row.label}`}
                               style={{
-                                background: copied === 'req-' + i ? 'rgba(92, 140, 117, 0.2)' : 'rgba(255,255,255,0.06)',
-                                border: `1px solid ${copied === 'req-' + i ? 'rgba(92,140,117,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                                background: copied === 'req-' + i ? 'rgba(92, 140, 117, 0.25)' : 'rgba(212,124,63,0.1)',
+                                border: `1px solid ${copied === 'req-' + i ? 'rgba(92,140,117,0.5)' : 'rgba(212,124,63,0.35)'}`,
                                 borderRadius: 6,
-                                padding: '4px 10px',
-                                color: copied === 'req-' + i ? '#5c8c75' : 'white',
+                                padding: '5px 12px',
+                                color: copied === 'req-' + i ? '#5c8c75' : '#f0a96b',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 6,
+                                gap: 5,
                                 fontFamily: "'JetBrains Mono', monospace",
                                 fontSize: 10,
-                                fontWeight: 700,
-                                textTransform: 'uppercase'
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                transition: 'all 0.15s',
+                                letterSpacing: '0.05em',
                               }}
                             >
-                              {copied === 'req-' + i ? 'COPIED' : 'COPY'}
-                              <Clipboard size={10} />
+                              {copied === 'req-' + i
+                                ? <><Check size={10} /> COPIED</>
+                                : <><Clipboard size={10} /> COPY</>
+                              }
                             </button>
                           )}
                         </div>
@@ -947,6 +1049,16 @@ export default function GuidePanel({ task, onClose, onMarkDone, onNavigate, onTo
                               </button>
                             )}
                           </div>
+
+                          {/* Interactive Explainer Accordion Widget — visible on the active/first-incomplete step */}
+                          {(state === 'active') && step.explainer_type && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ cursor: 'default', marginTop: '12px' }}
+                            >
+                              <InteractiveExplainer explainerType={step.explainer_type} />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )
