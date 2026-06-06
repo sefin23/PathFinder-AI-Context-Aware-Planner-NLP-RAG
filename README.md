@@ -12,8 +12,8 @@ Most life situations don't come with instructions. You type _"I'm finishing coll
 <br>
 <h3 align="center">▶️ Click to Watch the Full Demo Video</h3>
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=b6Tyv2ztAoE">
-    <img src="https://img.youtube.com/vi/b6Tyv2ztAoE/maxresdefault.jpg" alt="Pathfinder AI Demo Video" width="800" />
+  <a href="https://www.youtube.com/watch?v=B0kKT_xgbpw">
+    <img src="https://img.youtube.com/vi/B0kKT_xgbpw/maxresdefault.jpg" alt="Pathfinder AI Demo Video" width="800" />
   </a>
 </p>
 
