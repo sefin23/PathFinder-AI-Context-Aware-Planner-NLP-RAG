@@ -9,6 +9,16 @@
 
 Most life situations don't come with instructions. You type _"I'm finishing college and moving to a new city for my first job"_ — PathFinder AI reads the situation, asks a few smart questions if needed, and builds a personalised step-by-step plan covering documentation, accommodation, banking, and onboarding. Upload your offer letter and it reads the joining date, company, and location automatically — pre-filling your requirements so you never enter the same detail twice. Each task comes with the exact official link you need and a guided walkthrough that knows which documents you've already uploaded. As your situation changes, the plan adapts with it.
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=b6Tyv2ztAoE">
+    <img src="https://img.youtube.com/vi/b6Tyv2ztAoE/maxresdefault.jpg" alt="Pathfinder AI Demo Video" width="800" />
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://sefin23.github.io/PathFinder-AI-Context-Aware-Planner-NLP-RAG/ux-case-study/">✨ View the Interactive UX Case Study</a></strong>
+</p>
+
 ## Key Features
 
 - 🧠 **Context-Aware Planning** — understands vague natural language input, not rigid forms. Covers 10 life domains: Housing, Work, Education, Health, Family, Finance, Legal, Parenting, Loss, and Personal Growth.

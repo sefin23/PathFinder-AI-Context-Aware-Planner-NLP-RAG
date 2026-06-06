@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pathfinder AI — LinkedIn Carousel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --forest: #0a1a15;
+    --forest-2: #0f2218;
+    --forest-card: #112119;
+    --amber: #d47c3f;
+    --amber-light: #e8a06a;
+    --amber-glow: rgba(212,124,63,0.18);
+    --emerald: #5c8c75;
+    --gold: #c9a84c;
+    --text-primary: #f0ede6;
+    --text-secondary: #a8b5a0;
+    --text-muted: #6b7d6a;
+    --border: rgba(212,124,63,0.22);
+    --font-display: "Playfair Display", Georgia, serif;
+    --font-body: "DM Sans", system-ui, sans-serif;
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0c1a14; font-family: var(--font-body); color: var(--text-primary);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 40px 24px; gap: 16px;
+  }
+  .viewer { width: 100%; max-width: 960px; }
+  .carousel-track { position: relative; width: 100%; }
+  .slide {
+    display: none; width: 100%;
+    background: var(--forest-card); border: 1px solid var(--border);
+    border-radius: 20px; overflow: hidden; position: relative; flex-direction: column;
+  }
+  .slide.active { display: flex; animation: slideIn 0.4s var(--ease-spring) both; }
+  @keyframes slideIn { from { opacity:0; transform:scale(0.97); } to { opacity:1; transform:scale(1); } }
+  .slide-inner { flex:1; display:flex; flex-direction:column; padding:36px 52px 36px; gap:0; }
+  .slide-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .brand { display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--amber); letter-spacing:.02em; }
+  .brand-logo { height:28px; width:auto; mix-blend-mode:screen; }
+  .slide-num { font-size:13px; font-weight:500; color:var(--text-muted); letter-spacing:.08em; }
+  .section-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.14em; color:#5c8c75; margin-bottom:12px; }
+  .slide-title { font-family:var(--font-display); font-size:clamp(26px,3vw,38px); font-weight:600; line-height:1.2; color:var(--text-primary); margin-bottom:18px; }
+  .slide-title em { font-style:italic; color:var(--amber-light); }
+  .slide-body { font-size:16px; line-height:1.7; color:var(--text-secondary); }
+  .slide-body p+p { margin-top:12px; }
+  .slide-body strong { color:var(--text-primary); font-weight:500; }
+  .slide-body em { font-style:italic; color:var(--amber-light); }
+  .bullet-list { display:flex; flex-direction:column; gap:14px; margin-top:20px; }
+  .bullet-item { display:flex; gap:14px; align-items:flex-start; }
+  .bullet-marker { width:22px; height:22px; border-radius:50%; background:var(--amber-glow); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--amber); flex-shrink:0; margin-top:2px; font-weight:600; }
+  .bullet-text { font-size:15px; line-height:1.6; color:var(--text-secondary); }
+  .bullet-text strong { color:var(--text-primary); font-weight:500; }
+  .insight-chips { display:flex; flex-direction:column; gap:12px; margin-top:20px; }
+  .chip { background:rgba(92,140,117,0.1); border:1px solid rgba(92,140,117,0.25); border-radius:10px; padding:14px 18px; font-size:14.5px; color:var(--text-secondary); line-height:1.55; }
+  .chip strong { color:var(--text-primary); }
+  .chip em { font-style:italic; color:var(--amber-light); }
+  .decision-block { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px; }
+  .decision-card { background:rgba(212,124,63,0.07); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:6px; }
+  .decision-icon { font-size:22px; margin-bottom:4px; }
+  .decision-title { font-size:12px; font-weight:600; color:var(--amber); text-transform:uppercase; letter-spacing:.08em; }
+  .decision-desc { font-size:13.5px; color:var(--text-secondary); line-height:1.5; }
+  .palette-row { display:flex; gap:8px; margin-top:20px; }
+  .swatch { flex:1; height:40px; border-radius:8px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:5px; }
+  .swatch-label { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; opacity:.75; color:#fff; }
+  .learning-list { display:flex; flex-direction:column; gap:16px; margin-top:20px; }
+  .learning-item { border-left:2px solid var(--amber); padding-left:16px; }
+  .learning-title { font-size:14.5px; font-weight:600; color:var(--text-primary); margin-bottom:4px; }
+  .learning-body { font-size:13.5px; color:var(--text-secondary); line-height:1.5; }
+  .outcome-grid { display:flex; flex-direction:column; gap:14px; margin-top:20px; }
+  .outcome-item { display:flex; gap:16px; align-items:flex-start; background:rgba(92,140,117,0.08); border:1px solid rgba(92,140,117,0.2); border-radius:12px; padding:16px 20px; }
+  .outcome-icon { font-size:22px; flex-shrink:0; margin-top:1px; }
+  .outcome-text strong { display:block; font-size:14.5px; font-weight:600; color:var(--text-primary); margin-bottom:4px; }
+  .outcome-text span { font-size:13.5px; color:var(--text-secondary); line-height:1.5; }
+  .tagline-banner { margin-top:24px; border-top:1px solid rgba(212,124,63,0.15); padding-top:18px; font-family:var(--font-display); font-style:italic; font-size:15px; color:var(--text-muted); }
+  .intro-meta { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:28px; }
+  .meta-pair { display:flex; flex-direction:column; gap:5px; }
+  .meta-key { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:var(--text-muted); }
+  .meta-val { font-size:14px; color:var(--text-secondary); }
+  .controls { display:flex; align-items:center; gap:14px; width:100%; max-width:960px; justify-content:center; }
+  .btn-nav { width:40px; height:40px; border-radius:50%; border:1px solid var(--border); background:var(--forest-card); color:var(--text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s var(--ease-spring); flex-shrink:0; }
+  .btn-nav:hover { background:var(--amber-glow); border-color:var(--amber); color:var(--amber); }
+  .btn-nav svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .dots { display:flex; gap:6px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--text-muted); cursor:pointer; transition:all .25s var(--ease-spring); border:none; padding:0; }
+  .dot.active { background:var(--amber); width:20px; border-radius:3px; }
+  @media print {
+    body { background:white; padding:0; gap:0; }
+    .controls { display:none !important; }
+    .slide { display:flex !important; page-break-after:always; border:none; border-radius:0; }
+    .viewer { max-width:100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="viewer">
+ <div class="carousel-track">
+
+   <!-- 01 Cover -->
+  <div class="slide active" id="slide-1">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">01 / 10</span></div>
+    <span class="section-label">UX Case Study</span>
+    <h1 class="slide-title">A calmer way to plan <em>the big moments</em></h1>
+    <div class="slide-body"><p>An AI-first life event planning app — built for people who feel completely lost when a big decision lands on them.</p></div>
+    <div class="intro-meta">
+     <div class="meta-pair"><span class="meta-key">Role</span><span class="meta-val">Solo — product, UX, code</span></div>
+     <div class="meta-pair"><span class="meta-key">Stack</span><span class="meta-val">React · FastAPI · Gemini · RAG</span></div>
+     <div class="meta-pair"><span class="meta-key">Status</span><span class="meta-val">Working local prototype</span></div>
+     <div class="meta-pair"><span class="meta-key">Timeline</span><span class="meta-val">January – April 2026</span></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 02 Problem -->
+  <div class="slide" id="slide-2">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">02 / 10</span></div>
+    <span class="section-label">Problem &amp; Context</span>
+    <h2 class="slide-title">The information exists. <em>Nobody organises it for you.</em></h2>
+    <div class="slide-body">
+     <p>You just got a job offer in another city. Excited, slightly terrified, no idea where to start.</p>
+     <p>You Google it. <strong>14 tabs later</strong>, you have a Reddit thread from 2019 and a list of tasks with zero context about order or priority.</p>
+     <p>The problem isn't missing information — it's that nobody organises it <em>for your exact situation</em>. Students and early-career folks navigating their first move, first visa, first loan get hit hardest.</p>
+    </div>
+   </div>
+  </div>
+
+  <!-- 03 Research -->
+  <div class="slide" id="slide-3">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">03 / 10</span></div>
+    <span class="section-label">Research &amp; Validation</span>
+    <h2 class="slide-title">The data said: <em>this pain is real and it's widespread.</em></h2>
+    <div class="slide-body"><p style="margin-bottom:12px;">Solo project, no formal research budget. I used two sources to understand the problem space.</p></div>
+    <div class="insight-chips">
+     <div class="chip">📊 <strong>Fix My Itch (Razorpay)</strong> — 10k+ verified reports from 50k+ people. Relocation scored 79/100, visa applications 77/100. Not a personal feeling — a pattern at scale.</div>
+     <div class="chip">💬 <strong>Reddit &amp; forums</strong> — r/AskIndia, r/NRI, r/TwoXIndia. The recurring theme: people weren't confused about <em>how</em> to do things. They couldn't figure out <em>what</em> to do, or in what order. One confusing step and they gave up entirely.</div>
+    </div>
+    <div class="tagline-banner">People fail at figuring out what the tasks are — not at doing them.</div>
+   </div>
+  </div>
+
+  <!-- 04 Constraints -->
+  <div class="slide" id="slide-4">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">04 / 10</span></div>
+    <span class="section-label">Constraints &amp; Scope</span>
+    <h2 class="slide-title">Tight constraints. <em>Deliberate choices.</em></h2>
+    <div class="slide-body" style="margin-bottom:12px;"><p>Solo, secondary research only, free-tier APIs. That meant every design decision had to earn its place with zero slack.</p></div>
+    <div class="bullet-list">
+     <div class="bullet-item"><span class="bullet-marker">1</span><div class="bullet-text"><strong>Solo scope</strong> — product, UX, design, and code</div></div>
+     <div class="bullet-item"><span class="bullet-marker">2</span><div class="bullet-text"><strong>Secondary research only</strong> — no formal interviews or testing budget.</div></div>
+     <div class="bullet-item"><span class="bullet-marker">3</span><div class="bullet-text"><strong>India-first</strong> — built around Aadhaar, PAN, EPFO, GST, Passport Seva. Real portals, real friction.</div></div>
+     <div class="bullet-item"><span class="bullet-marker">4</span><div class="bullet-text"><strong>Free-tier only</strong> — every API decision made with zero paid tier available.</div></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 05 Decisions 1&2 -->
+  <div class="slide" id="slide-5">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">05 / 10</span></div>
+    <span class="section-label">Key Decisions #1 &amp; #2</span>
+    <h2 class="slide-title"><em>Free text</em> input. Then smarter follow-up questions.</h2>
+    <div class="slide-body" style="margin-bottom:14px;"><p>No dropdowns. You type what's happening — <em>"I got a job in London"</em> — and the AI reads it, identifies the event types, and builds from that. Real life rarely fits one category.</p></div>
+    <div class="decision-block">
+     <div class="decision-card"><span class="decision-icon">✍️</span><span class="decision-title">Free text</span><p class="decision-desc">Describe the situation like you'd explain it to a friend. No structured categories required.</p></div>
+     <div class="decision-card"><span class="decision-icon">🤔</span><span class="decision-title">Clarification</span><p class="decision-desc">2–3 smart follow-ups (visa? family? joining date?) make the plan specific to you. This is the feature, not a delay.</p></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 06 Decisions 3&4 -->
+  <div class="slide" id="slide-6">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">06 / 10</span></div>
+    <span class="section-label">Key Decisions #3 &amp; #4</span>
+    <h2 class="slide-title">See the plan <em>before it saves</em>. Your documents follow you.</h2>
+    <div class="slide-body" style="margin-bottom:14px;"><p>Two rules guided these: AI shouldn't act without your permission, and you should never have to re-enter the same information twice.</p></div>
+    <div class="decision-block">
+     <div class="decision-card"><span class="decision-icon">✅</span><span class="decision-title">Approve first</span><p class="decision-desc">Full plan preview before anything saves. It becomes your plan when you choose it — not when AI generates it.</p></div>
+     <div class="decision-card"><span class="decision-icon">🗄️</span><span class="decision-title">Document Vault</span><p class="decision-desc">Upload Aadhaar, passport, offer letter once. Vision AI extracts fields and pre-fills task details automatically.</p></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 07 Decisions 5&6 -->
+  <div class="slide" id="slide-7">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">07 / 10</span></div>
+    <span class="section-label">Key Decisions #5 &amp; #6</span>
+    <h2 class="slide-title">Portal walkthroughs. <em>A chatbot that knows only your plan.</em></h2>
+    <div class="slide-body" style="margin-bottom:14px;"><p>The biggest drop-off happens when users leave the app and land on a confusing government portal. Two features close that gap directly.</p></div>
+    <div class="decision-block">
+     <div class="decision-card"><span class="decision-icon">🧭</span><span class="decision-title">Guide Me</span><p class="decision-desc">Animated cursor overlays on real portal screenshots — 8 portals. Screenshots don't break when layouts change.</p></div>
+     <div class="decision-card"><span class="decision-icon">💬</span><span class="decision-title">Ask Your Plan</span><p class="decision-desc">Scoped strictly to your tasks, documents, timeline, and city. No general noise — only execution help.</p></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 08 Design System -->
+  <div class="slide" id="slide-8">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">08 / 10</span></div>
+    <span class="section-label">Visual Design System</span>
+    <h2 class="slide-title">"Dark Forest" — <em>grounded, not clinical.</em></h2>
+    <div class="slide-body"><p style="margin-bottom:10px;">Most productivity apps feel cold and corporate. A planning app for stressful life events should feel calm and navigable — the user is a traveler, the app is their guide, the plan is the route.</p></div>
+    <div class="palette-row">
+     <div class="swatch" style="background:#0a1a15;"><span class="swatch-label">Forest</span></div>
+     <div class="swatch" style="background:#d47c3f;"><span class="swatch-label">Amber</span></div>
+     <div class="swatch" style="background:#5c8c75;"><span class="swatch-label">Emerald</span></div>
+     <div class="swatch" style="background:#c65d4a;"><span class="swatch-label">Coral</span></div>
+     <div class="swatch" style="background:#5c8c9e;"><span class="swatch-label">Sky</span></div>
+     <div class="swatch" style="background:#c9a84c;"><span class="swatch-label">Gold</span></div>
+    </div>
+    <div class="bullet-list" style="margin-top:12px;">
+     <div class="bullet-item"><span class="bullet-marker">T</span><div class="bullet-text"><strong>Playfair Display</strong> for editorial headings · <strong>DM Sans</strong> for all UI copy · <strong>JetBrains Mono</strong> for metadata labels.</div></div>
+     <div class="bullet-item"><span class="bullet-marker">→</span><div class="bullet-text"><strong>Spring easing</strong> cubic-bezier(0.16, 1, 0.3, 1) — snappy, not harsh. Every motion is purposeful, not decorative.</div></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 09 Learnings -->
+  <div class="slide" id="slide-9">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">09 / 10</span></div>
+    <span class="section-label">Core Insights</span>
+    <h2 class="slide-title">Four principles that <em>shaped the product.</em></h2>
+    <div class="learning-list">
+     <div class="learning-item"><div class="learning-title">The event is the root object, not the task</div><div class="learning-body">Deadlines and document matching only make sense scoped under a parent event. Most apps get this wrong.</div></div>
+     <div class="learning-item"><div class="learning-title">RAG over scraping is a trust choice, not just technical</div><div class="learning-body">Wrong instructions on a visa filing are worse than no instructions. Reliability beat automation.</div></div>
+     <div class="learning-item"><div class="learning-title">The gap is between the checklist and actually doing it</div><div class="learning-body">Knowing what to do isn't the blocker — knowing how to start the confusing next step is. That's what this app targets.</div></div>
+     <div class="learning-item"><div class="learning-title">AI assists. The user decides.</div><div class="learning-body">Approve-before-save and edit rights aren't safety fallbacks — they're the core of respectful AI UX.</div></div>
+    </div>
+   </div>
+  </div>
+
+  <!-- 10 Outcomes -->
+  <div class="slide" id="slide-10">
+   <div class="slide-inner">
+    <div class="slide-header"><span class="brand"><img class="brand-logo" src="pathfinder_emblem.png" alt="">Pathfinder AI</span><span class="slide-num">10 / 10</span></div>
+    <span class="section-label">Final Outcomes</span>
+    <h2 class="slide-title">Working end-to-end. <em>Calmer than anything else I've seen.</em></h2>
+    <div class="outcome-grid">
+     <div class="outcome-item"><span class="outcome-icon">⚡</span><div class="outcome-text"><strong>Fully working prototype</strong><span>React + FastAPI + Gemini, tested across relocation, business registration, and visa scenarios.</span></div></div>
+     <div class="outcome-item"><span class="outcome-icon">🧭</span><div class="outcome-text"><strong>Execution layer, not just planning</strong><span>Portal guides, pre-filled vault details, and scoped chat go beyond the checklist.</span></div></div>
+     <div class="outcome-item"><span class="outcome-icon">🌿</span><div class="outcome-text"><strong>Genuinely calmer experience</strong><span>The Dark Forest UI and personalised workflows reduce cognitive load on hard days.</span></div></div>
+    </div>
+   </div>
+  </div>
+
+ </div>
+</div>
+
+<div class="controls">
+ <button class="btn-nav" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+ <div class="dots" id="dots"></div>
+ <button class="btn-nav" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+</div>
+
+
+
+<script>
+const slides = document.querySelectorAll(".slide");
+const dotsEl = document.getElementById("dots");
+let current = 0;
+slides.forEach((_,i)=>{
+  const d=document.createElement("button");
+  d.className="dot"+(i===0?" active":"");
+  d.setAttribute("aria-label","Go to slide "+(i+1));
+  d.addEventListener("click",()=>goTo(i));
+  dotsEl.appendChild(d);
+});
+function goTo(idx){
+  slides[current].classList.remove("active");
+  dotsEl.querySelectorAll(".dot")[current].classList.remove("active");
+  current=(idx+slides.length)%slides.length;
+  slides[current].classList.add("active");
+  dotsEl.querySelectorAll(".dot")[current].classList.add("active");
+}
+document.getElementById("prev").addEventListener("click",()=>goTo(current-1));
+document.getElementById("next").addEventListener("click",()=>goTo(current+1));
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowRight"||e.key==="ArrowDown")goTo(current+1);
+  if(e.key==="ArrowLeft"||e.key==="ArrowUp")goTo(current-1);
+});
+let tx=null;
+document.querySelector(".carousel-track").addEventListener("touchstart",e=>{tx=e.touches[0].clientX;},{passive:true});
+document.querySelector(".carousel-track").addEventListener("touchend",e=>{
+  if(tx===null)return;
+  const dx=e.changedTouches[0].clientX-tx;
+  if(Math.abs(dx)>40)goTo(current+(dx<0?1:-1));
+  tx=null;
+},{passive:true});
+</script>
+</body>
+</html>
