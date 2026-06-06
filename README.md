@@ -18,7 +18,7 @@ Most life situations don't come with instructions. You type _"I'm finishing coll
 </p>
 
 <p align="center">
-  <strong><a href="https://sefin23.github.io/PathFinder-AI-Context-Aware-Planner-NLP-RAG/ux-case-study/">✨ View the Interactive UX Case Study</a></strong>
+  <strong><a href="https://sefin23.github.io/PathFinder-AI-Context-Aware-Planner-NLP-RAG/ux-case-study/">✨ View the UX Case Study</a></strong>
 </p>
 
 ## Key Features
