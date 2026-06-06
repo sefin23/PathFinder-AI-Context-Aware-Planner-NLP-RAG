@@ -10,7 +10,7 @@
 Most life situations don't come with instructions. You type _"I'm finishing college and moving to a new city for my first job"_ — PathFinder AI reads the situation, asks a few smart questions if needed, and builds a personalised step-by-step plan covering documentation, accommodation, banking, and onboarding. Upload your offer letter and it reads the joining date, company, and location automatically — pre-filling your requirements so you never enter the same detail twice. Each task comes with the exact official link you need and a guided walkthrough that knows which documents you've already uploaded. As your situation changes, the plan adapts with it.
 
 <br>
-<h3 align="center">▶️ Click to Watch the Full Demo Video</h3>
+<h3 align="center">▶️ Click to Watch the Demo Video:</h3>
 <p align="center">
   <a href="https://www.youtube.com/watch?v=b6Tyv2ztAoE">
     <img src="https://img.youtube.com/vi/b6Tyv2ztAoE/maxresdefault.jpg" alt="Pathfinder AI Demo Video" width="800" />
